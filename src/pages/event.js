@@ -19,6 +19,11 @@ import { useWindowWidth } from '@react-hook/window-size/throttled';
 import OpenLink from '../assets/images/openLink.svg'
 
 const GRAPH_LIMIT = 1000;
+const CanDownloadCsvStatus = {
+  NotReady: 'NotReady',
+  OnLastStep: 'OnLastStep',
+  Ready: 'Ready',
+}
 
 export default function Events() {
   let match = useRouteMatch();
@@ -48,6 +53,7 @@ export function Event() {
   const [data, setData] = useState([]);
   const [csv_data, setCsv_data] = useState([]);
   const [ensNames, setEnsNames] = useState([]);
+  const [canDownloadCsv, setCanDownloadCsv] = useState(CanDownloadCsvStatus.NotReady);
   const width = useWindowWidth();
   const pageCount = useMemo( () => event.tokenCount % 50 !== 0 ? Math.floor(event.tokenCount / 50) + 1 : event.tokenCount, [event])
   const power = calculatePower(csv_data);
@@ -65,14 +71,31 @@ export function Event() {
       <span className='power-title'>Power</span><span className='power-content'>{token.owner.tokensOwned}</span>
     </div>
   )
+
   useEffect(() => {
     if (eventId) {
+      const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
+      if (event && event.tokenCount > GRAPH_LIMIT && tokens && tokens.length > 0 && pageIndex + 1 === totalPages) {
+        // We're about to dispatch a search for the last set of tokens
+        setCanDownloadCsv(CanDownloadCsvStatus.OnLastStep)
+      }
       dispatch(fetchEventPageData({ eventId, first: GRAPH_LIMIT, skip: GRAPH_LIMIT*pageIndex  }))
     }
   }, [dispatch, eventId, pageIndex])
+  useEffect(() => {
+    if (loadingEvent === 'succeeded' && canDownloadCsv === CanDownloadCsvStatus.OnLastStep) {
+      // Finished last step, all token data is available (except maybe for ens column)
+      let ownerIds = tokens.map(t => t.owner.id)
+      getEnsData(ownerIds).then(allnames => {
+        if(allnames.length > 0){
+          setEnsNames(allnames)
+        }
+        setCanDownloadCsv(CanDownloadCsvStatus.Ready)
+      })
+    }
+  }, [loadingEvent])
 
   useEffect(() => {
-    let ownerIds = tokens.map(t => t.owner.id)
     if (event && event.tokenCount > GRAPH_LIMIT && tokens && tokens.length > 0) {
       const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
       if (pageIndex + 1 < totalPages) {
@@ -101,11 +124,6 @@ export function Event() {
     }
     setData(_data)
     setCsv_data(_csv_data)
-    getEnsData(ownerIds).then(allnames => {
-      if(allnames.length > 0){
-        setEnsNames(allnames)
-      }
-    })
   }, [event, tokens, pageIndex, setPageIndex, width]);
 
   useEffect(() => {
@@ -162,6 +180,18 @@ export function Event() {
     ],
     []
   )
+
+  const csvButtonStyle = {
+    width: 'fit-content',
+    minWidth: 'auto',
+    marginBottom: '0px',
+    marginLeft: 'auto',
+    padding: '12px 32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 6px 18px 0 #6534FF4D',
+  }
 
   if (loadingEvent === 'loading' || loadingEvent === 'idle') {
     return (
@@ -231,25 +261,26 @@ export function Event() {
         </div>
         <div className='table-header'>
           <div className='table-title'>Collections <span>({tokens.length})</span></div>
-          <CSVLink
-            filename={`${event.name}.csv`}
-            target="_blank"
-            className="btn"
-            style={{
-              width: 'fit-content',
-              minWidth: 'auto',
-              marginBottom: '0px',
-              marginLeft: 'auto',
-              padding: '12px 32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 6px 18px 0 #6534FF4D',
-            }}
-            data={csv_data}
-          >
-            <span>Download CSV</span>
-          </CSVLink>
+          {canDownloadCsv === CanDownloadCsvStatus.Ready ?
+            <CSVLink
+              filename={`${event.name}.csv`}
+              target="_blank"
+              className={'btn'}
+              style={csvButtonStyle}
+              data={csv_data}
+            >
+              <span>Download CSV</span>
+            </CSVLink> :
+            <>
+              <button
+                  className={'btn button-disabled'}
+                  style={csvButtonStyle}
+                  data-tip={'Please wait for the POAPs data to be loaded'}
+                  onClick={null}
+              ><span>Download CSV</span></button>
+              <ReactTooltip effect={'solid'} />
+            </>
+          }
         </div>
         <div className='table-container'>
           {
