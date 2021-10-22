@@ -248,7 +248,7 @@ ol {
 .button-disabled {
   cursor: default;
   background-color: lightgray;
-  &:hover {
+  &:hover, &:focus-visible, &:focus {
     background-color: lightgray;
   }
   box-shadow: none!important;

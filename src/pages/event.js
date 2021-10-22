@@ -22,6 +22,7 @@ const GRAPH_LIMIT = 1000;
 const CanDownloadCsvStatus = {
   NotReady: 'NotReady',
   OnLastStep: 'OnLastStep',
+  ReadyWithoutEns: 'ReadyWithoutEns',
   Ready: 'Ready',
 }
 
@@ -73,34 +74,20 @@ export function Event() {
   )
 
   useEffect(() => {
+    // Get new batch of tokens
     if (eventId) {
-      const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
-      if (event && event.tokenCount > GRAPH_LIMIT && tokens && tokens.length > 0 && pageIndex + 1 === totalPages) {
-        // We're about to dispatch a search for the last set of tokens
-        setCanDownloadCsv(CanDownloadCsvStatus.OnLastStep)
-      }
       dispatch(fetchEventPageData({ eventId, first: GRAPH_LIMIT, skip: GRAPH_LIMIT*pageIndex  }))
     }
-  }, [dispatch, eventId, pageIndex]) /* eslint-disable-line react-hooks/exhaustive-deps */
-  useEffect(() => {
-    if (loadingEvent === 'succeeded' && canDownloadCsv === CanDownloadCsvStatus.OnLastStep) {
-      // Finished last step, all token data is available (except maybe for ens column)
-      let ownerIds = tokens.map(t => t.owner.id)
-      getEnsData(ownerIds).then(allnames => {
-        if(allnames.length > 0){
-          setEnsNames(allnames)
-        }
-        setCanDownloadCsv(CanDownloadCsvStatus.Ready)
-      })
-    }
-  }, [loadingEvent]) /* eslint-disable-line react-hooks/exhaustive-deps */
+  }, [dispatch, eventId, pageIndex])
 
   useEffect(() => {
-    if (event && event.tokenCount > GRAPH_LIMIT && tokens && tokens.length > 0) {
-      const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
-      if (pageIndex + 1 < totalPages) {
-        setPageIndex(pageIndex + 1);
+    // Call next batch of tokens (if there is more), then load the new tokens data
+    const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
+    if (event && tokens && tokens.length > 0 && pageIndex < totalPages) {
+      if (pageIndex + 1 === totalPages) {
+        setCanDownloadCsv(CanDownloadCsvStatus.OnLastStep)
       }
+      setPageIndex(pageIndex + 1);
     }
 
     let _data = []
@@ -127,6 +114,7 @@ export function Event() {
   }, [event, tokens, pageIndex, setPageIndex, width]);
 
   useEffect(() => {
+    // Merge ens data
     if(ensNames.length > 0){
       // TODO: probably there is a better way to merge
       let _data = _.cloneDeep(data);
@@ -144,6 +132,22 @@ export function Event() {
       setCsv_data(_csv_data)
     }
   }, [ensNames]) /* eslint-disable-line react-hooks/exhaustive-deps */
+
+  useEffect(() => {
+    if (loadingEvent === 'succeeded' && canDownloadCsv === CanDownloadCsvStatus.OnLastStep) {
+      // Finished last step, all token data is available (except for ens data)
+      setCanDownloadCsv(CanDownloadCsvStatus.ReadyWithoutEns)
+      let ownerIds = tokens.map(t => t.owner.id)
+      getEnsData(ownerIds).then(allnames => {
+        if(allnames.length > 0){
+          setEnsNames(allnames)
+        }
+        setCanDownloadCsv(CanDownloadCsvStatus.Ready)
+      }).catch((e) => {
+        console.error('Error getting ens data. ', e)
+      })
+    }
+  }, [loadingEvent]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
   const columns = useMemo(
     () => [
@@ -261,26 +265,25 @@ export function Event() {
         </div>
         <div className='table-header'>
           <div className='table-title'>Collections <span>({tokens.length})</span></div>
-          {canDownloadCsv === CanDownloadCsvStatus.Ready ?
+          {canDownloadCsv === CanDownloadCsvStatus.Ready || canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ?
             <CSVLink
               filename={`${event.name}.csv`}
               target="_blank"
+              data-tip={`${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? 'Please wait if you want the ens names too' : ''}`}
               className={'btn'}
               style={csvButtonStyle}
               data={csv_data}
             >
-              <span>Download CSV</span>
+              <span>{`Download CSV ${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? '(without ens)' : ''}`}</span>
             </CSVLink> :
-            <>
-              <button
-                  className={'btn button-disabled'}
-                  style={csvButtonStyle}
-                  data-tip={'Please wait for the POAPs data to be loaded'}
-                  onClick={null}
-              ><span>Download CSV</span></button>
-              <ReactTooltip effect={'solid'} />
-            </>
+            <button
+                className={'btn button-disabled'}
+                style={csvButtonStyle}
+                data-tip={'Please wait for the POAPs data to be loaded'}
+                onClick={null}
+            ><span>Download CSV</span></button>
           }
+          <ReactTooltip effect={'solid'} />
         </div>
         <div className='table-container'>
           {
