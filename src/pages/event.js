@@ -81,7 +81,7 @@ export function Event() {
       }
       dispatch(fetchEventPageData({ eventId, first: GRAPH_LIMIT, skip: GRAPH_LIMIT*pageIndex  }))
     }
-  }, [dispatch, eventId, pageIndex])
+  }, [dispatch, eventId, pageIndex]) /* eslint-disable-line react-hooks/exhaustive-deps */
   useEffect(() => {
     if (loadingEvent === 'succeeded' && canDownloadCsv === CanDownloadCsvStatus.OnLastStep) {
       // Finished last step, all token data is available (except maybe for ens column)
@@ -93,7 +93,7 @@ export function Event() {
         setCanDownloadCsv(CanDownloadCsvStatus.Ready)
       })
     }
-  }, [loadingEvent])
+  }, [loadingEvent]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
   useEffect(() => {
     if (event && event.tokenCount > GRAPH_LIMIT && tokens && tokens.length > 0) {
