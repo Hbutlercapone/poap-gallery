@@ -52,8 +52,8 @@ const eventsSlice = createSlice({
       }
 
       state.tokenId = action.payload.id
-      state.eventStatus = 'succeeded'
       state.event = action.payload.event
+      state.eventStatus = 'succeeded'
     },
     [fetchEventPageData.rejected]: (state, action) => {
       state.eventError = action.error.message

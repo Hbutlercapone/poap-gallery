@@ -244,3 +244,12 @@ ol {
 .tdColumnImage{
   height: 26px;
 }
+
+.button-disabled {
+  cursor: default;
+  background-color: lightgray;
+  &:hover, &:focus-visible, &:focus {
+    background-color: lightgray;
+  }
+  box-shadow: none!important;
+}

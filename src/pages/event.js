@@ -19,6 +19,12 @@ import { useWindowWidth } from '@react-hook/window-size/throttled';
 import OpenLink from '../assets/images/openLink.svg'
 
 const GRAPH_LIMIT = 1000;
+const CanDownloadCsvStatus = {
+  NotReady: 'NotReady',
+  OnLastStep: 'OnLastStep',
+  ReadyWithoutEns: 'ReadyWithoutEns',
+  Ready: 'Ready',
+}
 
 export default function Events() {
   let match = useRouteMatch();
@@ -48,6 +54,7 @@ export function Event() {
   const [data, setData] = useState([]);
   const [csv_data, setCsv_data] = useState([]);
   const [ensNames, setEnsNames] = useState([]);
+  const [canDownloadCsv, setCanDownloadCsv] = useState(CanDownloadCsvStatus.NotReady);
   const width = useWindowWidth();
   const pageCount = useMemo( () => event.tokenCount % 50 !== 0 ? Math.floor(event.tokenCount / 50) + 1 : event.tokenCount, [event])
   const power = calculatePower(csv_data);
@@ -65,19 +72,22 @@ export function Event() {
       <span className='power-title'>Power</span><span className='power-content'>{token.owner.tokensOwned}</span>
     </div>
   )
+
   useEffect(() => {
+    // Get new batch of tokens
     if (eventId) {
       dispatch(fetchEventPageData({ eventId, first: GRAPH_LIMIT, skip: GRAPH_LIMIT*pageIndex  }))
     }
   }, [dispatch, eventId, pageIndex])
 
   useEffect(() => {
-    let ownerIds = tokens.map(t => t.owner.id)
-    if (event && event.tokenCount > GRAPH_LIMIT && tokens && tokens.length > 0) {
-      const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
-      if (pageIndex + 1 < totalPages) {
-        setPageIndex(pageIndex + 1);
+    // Call next batch of tokens (if there is more), then load the new tokens data
+    const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
+    if (event && tokens && tokens.length > 0 && pageIndex < totalPages) {
+      if (pageIndex + 1 === totalPages) {
+        setCanDownloadCsv(CanDownloadCsvStatus.OnLastStep)
       }
+      setPageIndex(pageIndex + 1);
     }
 
     let _data = []
@@ -101,14 +111,10 @@ export function Event() {
     }
     setData(_data)
     setCsv_data(_csv_data)
-    getEnsData(ownerIds).then(allnames => {
-      if(allnames.length > 0){
-        setEnsNames(allnames)
-      }
-    })
   }, [event, tokens, pageIndex, setPageIndex, width]);
 
   useEffect(() => {
+    // Merge ens data
     if(ensNames.length > 0){
       // TODO: probably there is a better way to merge
       let _data = _.cloneDeep(data);
@@ -126,6 +132,22 @@ export function Event() {
       setCsv_data(_csv_data)
     }
   }, [ensNames]) /* eslint-disable-line react-hooks/exhaustive-deps */
+
+  useEffect(() => {
+    if (loadingEvent === 'succeeded' && canDownloadCsv === CanDownloadCsvStatus.OnLastStep) {
+      // Finished last step, all token data is available (except for ens data)
+      setCanDownloadCsv(CanDownloadCsvStatus.ReadyWithoutEns)
+      let ownerIds = tokens.map(t => t.owner.id)
+      getEnsData(ownerIds).then(allnames => {
+        if(allnames.length > 0){
+          setEnsNames(allnames)
+        }
+        setCanDownloadCsv(CanDownloadCsvStatus.Ready)
+      }).catch((e) => {
+        console.error('Error getting ens data. ', e)
+      })
+    }
+  }, [loadingEvent]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
   const columns = useMemo(
     () => [
@@ -162,6 +184,18 @@ export function Event() {
     ],
     []
   )
+
+  const csvButtonStyle = {
+    width: 'fit-content',
+    minWidth: 'auto',
+    marginBottom: '0px',
+    marginLeft: 'auto',
+    padding: '12px 32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 6px 18px 0 #6534FF4D',
+  }
 
   if (loadingEvent === 'loading' || loadingEvent === 'idle') {
     return (
@@ -231,25 +265,25 @@ export function Event() {
         </div>
         <div className='table-header'>
           <div className='table-title'>Collections <span>({tokens.length})</span></div>
-          <CSVLink
-            filename={`${event.name}.csv`}
-            target="_blank"
-            className="btn"
-            style={{
-              width: 'fit-content',
-              minWidth: 'auto',
-              marginBottom: '0px',
-              marginLeft: 'auto',
-              padding: '12px 32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 6px 18px 0 #6534FF4D',
-            }}
-            data={csv_data}
-          >
-            <span>Download CSV</span>
-          </CSVLink>
+          {canDownloadCsv === CanDownloadCsvStatus.Ready || canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ?
+            <CSVLink
+              filename={`${event.name}.csv`}
+              target="_blank"
+              data-tip={`${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? 'Please wait if you want the ens names too' : ''}`}
+              className={'btn'}
+              style={csvButtonStyle}
+              data={csv_data}
+            >
+              <span style={{margin: 0}}>{`Download CSV${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? ' (without ens)' : ''}`}</span>
+              <ReactTooltip effect={'solid'} />
+            </CSVLink> :
+            <button
+                className={'btn button-disabled'}
+                style={csvButtonStyle}
+                data-tip={'Please wait for the POAPs data to be loaded'}
+                onClick={null}
+            ><span style={{margin: 0}}>Download CSV</span><ReactTooltip effect={'solid'} /></button>
+          }
         </div>
         <div className='table-container'>
           {

@@ -32,8 +32,15 @@ export async function getEnsData(ownerIds){
       console.log(e)
       names = chunk.map(a => null)
     }
-    const validNames = names.map(name => (namehash.normalize(name) === name && name !== '') && name )
-    allnames = _.concat(allnames, validNames);
+    const validNames = names.map(name => {
+      try {
+        return (namehash.normalize(name) === name && name !== '') && name
+      } catch (e) {
+        console.error('Couldn\'t parse ENS name. ', e)
+        return false
+      }
+    } )
+    allnames = _.concat(allnames, validNames);
   }
   return allnames
 }

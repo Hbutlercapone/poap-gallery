@@ -25,7 +25,6 @@ export default function Gallery() {
   const eventStatus = useSelector(selectEventStatus)
   const eventError = useSelector(selectEventError)
 
-
   const [items, setItems] = useState(events)
   const [search, setSearch] = useState(undefined);
   const [length, setLength] = useState(40);
@@ -50,7 +49,7 @@ export default function Gallery() {
     debounceHandleSearch(value, items)
   };
   const handleNewSearchValue = (value, items) => {
-    if (value && value.length > 1) {
+    if (value && value.length > 2) {
       const filteredItems = items.filter((item) => {
         return item.name.toLowerCase().indexOf(value.toLowerCase()) !== -1;
       });

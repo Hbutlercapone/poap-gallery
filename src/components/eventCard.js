@@ -69,8 +69,8 @@ function Content({type, width, size, event, power}) {
         }
     }, [event, transferCount])
 
-    const nl2br = (text) => (text.split('\n').map((item, key) => {
-        return <>{item}<br/></>
+    const nl2br = (text) => (text.split('\n').map(item => {
+        return <React.Fragment key={item.toString()}>{item}<br/></React.Fragment>
     }));
 
     return (
