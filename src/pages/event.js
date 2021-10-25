@@ -274,16 +274,16 @@ export function Event() {
               style={csvButtonStyle}
               data={csv_data}
             >
-              <span>{`Download CSV ${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? '(without ens)' : ''}`}</span>
+              <span style={{margin: 0}}>{`Download CSV${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? ' (without ens)' : ''}`}</span>
+              <ReactTooltip effect={'solid'} />
             </CSVLink> :
             <button
                 className={'btn button-disabled'}
                 style={csvButtonStyle}
                 data-tip={'Please wait for the POAPs data to be loaded'}
                 onClick={null}
-            ><span>Download CSV</span></button>
+            ><span style={{margin: 0}}>Download CSV</span><ReactTooltip effect={'solid'} /></button>
           }
-          <ReactTooltip effect={'solid'} />
         </div>
         <div className='table-container'>
           {
