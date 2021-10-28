@@ -12,12 +12,14 @@ export default function Dropdown({title, options, defaultOption, onClickOption})
 
   let optionsElements = []
   for(let i = 0; i < options.length; i++) {
+    const option = options[i]
     optionsElements.push(
-      <div className={`option ${options[i] === defaultOption?'active':''}`} onClick={() => {
-        setTitle(options[i])
+      <div key={option.name} className={`option ${option.name === defaultOption?'active':''}`} onClick={() => {
+        setTitle(option.name)
         toggleDisplayMenu()
-        onClickOption(options[i])
-      }}>{options[i]}</div>
+        //TODO: missing change active styling?
+        onClickOption(option)
+      }}>{option.name}</div>
     )
   }
 

@@ -1,5 +1,5 @@
 import { createSlice, combineReducers, configureStore, createAsyncThunk, current  } from '@reduxjs/toolkit';
-import { getIndexPageData, getEventPageData } from './mutations';
+import {getIndexPageData, getEventPageData, getActivityPageData} from './mutations';
 
 const initialEventsState = {
   events: [],
@@ -13,11 +13,18 @@ const initialEventsState = {
   eventStatus: 'idle',
   eventError: null,
   tokens: [],
-  tokenId: null
+  tokenId: null,
+  apiSkip: 0,
+  mainnetSkip: 0,
+  xdaiSkip: 0,
+  page: 0,
+  totalEvents: 0,
 }
 
-export const fetchIndexData = createAsyncThunk('events/fetchIndexEvents', getIndexPageData)
+export const fetchIndexData = createAsyncThunk('events/fetchIndexEvents',
+    async ({orderBy, reset, privateEvents = undefined}, thunkAPI) => getIndexPageData(orderBy, reset, privateEvents, thunkAPI.getState()))
 export const fetchEventPageData = createAsyncThunk('events/fetchEventPageData', async ({eventId, first, skip}) => getEventPageData(eventId, first, skip))
+export const fetchActivityPageData = createAsyncThunk('events/fetchActivityPageData', async ({}) => getActivityPageData())
 
 
 const eventsSlice = createSlice({
@@ -26,14 +33,28 @@ const eventsSlice = createSlice({
   reducers: {},
   extraReducers: {
     [fetchIndexData.pending]: (state, action) => {
-      state.status = 'loading'
+      const reset = action.meta.arg.reset //TODO: check if this is good practice
+      if (reset) {
+        state.status = 'loading'
+      } else {
+        state.status = 'loadingMore'
+      }
     },
     [fetchIndexData.fulfilled]: (state, action) => {
-      const { poapEvents, mostRecent, mostClaimed, upcoming } = action.payload
-      state.events = poapEvents
-      state.mostRecent = mostRecent
-      state.mostClaimed = mostClaimed
-      state.upcoming = upcoming
+      const { poapEvents, apiSkip, mainnetSkip, xdaiSkip, total, page } = action.payload
+
+      if (page === 0) {
+        state.events = poapEvents
+        state.page = 1
+      } else {
+        state.events = current(state.events).concat(poapEvents)
+        state.page++
+      }
+
+      state.apiSkip = apiSkip //TODO: use these skips
+      state.mainnetSkip = mainnetSkip
+      state.xdaiSkip = xdaiSkip
+      state.totalEvents = total //TODO: may not need it, check
       state.status = 'succeeded'
     },
     [fetchIndexData.rejected]: (state, action) => {
@@ -58,6 +79,20 @@ const eventsSlice = createSlice({
     [fetchEventPageData.rejected]: (state, action) => {
       state.eventError = action.error.message
       state.eventStatus = 'failed'
+      console.warn(action.error)
+    },
+    [fetchActivityPageData.pending]: (state, action) => {
+      // state.eventStatus = 'loading'
+    },
+    [fetchActivityPageData.fulfilled]: (state, action) => {
+      const { mostRecent, mostClaimed, upcoming } = action.payload
+      state.upcoming = upcoming
+      state.mostRecent = mostRecent
+      state.mostClaimed = mostClaimed
+    },
+    [fetchActivityPageData.rejected]: (state, action) => {
+      // state.eventError = action.error.message
+      // state.eventStatus = 'failed'
       console.warn(action.error)
     }
   }

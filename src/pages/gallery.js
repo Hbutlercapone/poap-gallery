@@ -1,7 +1,11 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import ActivityTable from '../components/activityTable'
 import {Helmet} from 'react-helmet';
-import {fetchIndexData, selectEventError, selectEventStatus, selectRecentEvents} from '../store';
+import {
+  fetchIndexData,
+  selectEventError,
+  selectEventStatus,
+} from '../store';
 import {useDispatch, useSelector} from 'react-redux';
 import {EventCard} from "../components/eventCard";
 import Loader from '../components/loader'
@@ -12,27 +16,35 @@ import FailedSearch from '../assets/images/failed-search.svg'
 import Dropdown from '../components/dropdown';
 import {faSearch} from "@fortawesome/free-solid-svg-icons/faSearch";
 import {useWindowWidth} from "@react-hook/window-size";
+import {OrderOption, OrderDirection} from "../store/api";
 
 export default function Gallery() {
   const dispatch = useDispatch()
 
-  // Meanwhile get all the events
-  useEffect(() => {
-    dispatch(fetchIndexData());
-  }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
-
-  const events  = useSelector(selectRecentEvents)
+  const events  = useSelector(state => state.events.events)
   const eventStatus = useSelector(selectEventStatus)
   const eventError = useSelector(selectEventError)
 
   const [items, setItems] = useState(events)
   const [search, setSearch] = useState(undefined);
-  const [length, setLength] = useState(40);
+  const [page, setPage] = useState(0);
 
-  const orderTypeOptions = ['Date', 'Id', 'City', 'Holders', 'Transfers']
-  const [orderType, setOrderType] = useState(orderTypeOptions[0]);
-  const orderDirectionOptions = ['High to Low', 'Low to High']
-  const [orderDirection, setOrderDirection] = useState(orderDirectionOptions[0]);
+  const initialOrderType = OrderOption.id
+  const initialOrderDirection = OrderDirection.descending
+  const [orderType, setOrderType] = useState(initialOrderType);
+  const [orderDirection, setOrderDirection] = useState(initialOrderDirection);
+  const fetchData = ({reset = false}) => {
+    dispatch(fetchIndexData({orderBy: {type: orderType.val, order: orderDirection.val}, privateEvents: false, reset: reset}))
+  }
+
+  // Meanwhile reset state and get all the events
+  useEffect(() => {
+    fetchData({reset: true})
+  }, [orderType, orderDirection]); /* eslint-disable-line react-hooks/exhaustive-deps */
+  useEffect(() => {
+    // Load more data
+    if (page > 0) fetchData({})
+  }, [page]); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   const [searchValue, setSearchValue] = useState('');
 
@@ -50,6 +62,7 @@ export default function Gallery() {
   };
   const handleNewSearchValue = (value, items) => {
     if (value && value.length > 2) {
+      //TODO: change this with dispatch for new data
       const filteredItems = items.filter((item) => {
         return item.name.toLowerCase().indexOf(value.toLowerCase()) !== -1;
       });
@@ -61,81 +74,9 @@ export default function Gallery() {
 
   const handleOrderDirectionChange = (value) => {
     setOrderDirection(value);
-    handleFilter(orderType, value);
   };
   const handleOrderTypeChange = (value) => {
     setOrderType(value);
-    handleFilter(value, orderDirection);
-  };
-
-  const handleFilter = (type, direction) => {
-    let isAsc = direction === 'Low to High'
-    let sortedItems = [...items]
-    if (type === 'Date') {
-      sortedItems.sort((a, b) => {
-        const a_start_date = a.start_date.replace(/-/g, " ")
-        const b_start_date = b.start_date.replace(/-/g, " ")
-        return isAsc
-          ? new Date(a_start_date).getTime() - new Date(b_start_date).getTime()
-          : new Date(b_start_date).getTime() - new Date(a_start_date).getTime();
-      });
-    } else if(type === 'Id') {
-      sortedItems.sort((a, b) => {
-        return isAsc ? a.id - b.id : b.id - a.id
-      })
-    } else if (type === 'City') {
-      sortedItems.sort((a, b) => {
-        a = a.city.trim().toLowerCase()
-        b = b.city.trim().toLowerCase()
-
-        if(a === "") {
-          return 1
-        }
-        if (b === "") {
-          return -1
-        }
-        if( a > b ) {
-          return isAsc ? 1 : -1
-        } else if(b > a) {
-          return isAsc ? -1 : 1
-        } else {
-          return 0
-        }
-      })
-    } else if (type === 'Holders') {
-      sortedItems.sort((a, b) => {
-        if(a.tokenCount === undefined) {
-          a.tokenCount = 0
-        }
-        if(b.tokenCount === undefined) {
-          b.tokenCount = 0
-        }
-        if(a.tokenCount > b.tokenCount) {
-          return isAsc ? 1 : -1
-        } else if (b.tokenCount > a.tokenCount) {
-          return isAsc ? -1 : 1
-        } else {
-          return 0
-        }
-      });
-    } else if (type === 'Transfers') {
-      sortedItems.sort((a, b) => {
-        if(a.transferCount === undefined) {
-          a.transferCount = 0
-        }
-        if(b.transferCount === undefined) {
-          b.transferCount = 0
-        }
-        if(a.transferCount > b.transferCount) {
-          return isAsc ? 1 : -1
-        } else if (b.transferCount > a.transferCount) {
-          return isAsc ? -1 : 1
-        } else {
-          return 0
-        }
-      });
-    }
-    setItems(sortedItems)
   };
 
   const eraseSearch = () => {
@@ -228,7 +169,11 @@ export default function Gallery() {
                         className="gallery-select-container"
                         role="menu"
                       >
-                        <Dropdown title={orderTypeOptions[0]} defaultOption={orderTypeOptions[0]} options={orderTypeOptions} onClickOption={(orderType) => handleOrderTypeChange(orderType)} />
+                        <Dropdown
+                            title={initialOrderType.name}
+                            defaultOption={initialOrderType.name}
+                            options={Object.values(OrderOption)}
+                            onClickOption={(orderType) => handleOrderTypeChange(orderType)} />
                       </div>
                     </div>
                     <div
@@ -246,7 +191,11 @@ export default function Gallery() {
                         className="gallery-select-container"
                         role="menu"
                       >
-                        <Dropdown title={orderDirectionOptions[0]} defaultOption={orderDirectionOptions[0]} options={orderDirectionOptions} onClickOption={(orderDirection) => handleOrderDirectionChange(orderDirection)} />
+                        <Dropdown
+                            title={initialOrderDirection.name}
+                            defaultOption={initialOrderDirection.name}
+                            options={Object.values(OrderDirection)}
+                            onClickOption={(orderDirection) => handleOrderDirectionChange(orderDirection)} />
                       </div>
                     </div>
                   </div>
@@ -261,13 +210,12 @@ export default function Gallery() {
               >
                 <span>Could not load gallery, check your connection and try again</span>
               </div>
-
-            ) : eventStatus === 'succeeded' ? (
+            ) : eventStatus === 'succeeded' || eventStatus === 'loadingMore' ? (
               (search?.length === 0) ? <div className='failed-search'>
                 <img src={FailedSearch} alt='Failed search'/>
                 <h3>No results for that search :(</h3>
               </div> :
-              <Cards events={(search?.length) ? search : items} length={search?.length || length} />
+              <Cards events={items} length={items.length} />
             ) : (
               <Loader/>
             )}
@@ -276,14 +224,10 @@ export default function Gallery() {
         </div>
           {!search ?
             <button  className='btn' onClick={() => {
-                if (items && items.length) {
-                  if (length + 20 < items.length) {
-                    setLength(length + 20);
-                  } else {
-                    setLength(items.length);
-                  }
-                }
-              }}
+              if (items && items.length) {
+                setPage(page + 1);
+              }
+            }}
               style={{
                 marginTop: '40px',
                 width: 'fit-content',
@@ -312,9 +256,7 @@ function Cards({ events, length }) {
     let len = (length <= events.length) ? length : events.length;
     for (let i = 0; i < len; i++) {
       const event = events[i]
-      if ( !event.private_event ) {
-        cards.push(<EventCard key={i} event={event} />)
-      }
+      cards.push(<EventCard key={event.id} event={event} />)
     }
   }
   return cards;

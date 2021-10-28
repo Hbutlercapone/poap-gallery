@@ -5,6 +5,7 @@ import {faAngleDown, faAngleUp, faDotCircle, faQuestionCircle} from '@fortawesom
 import {Helmet} from 'react-helmet'
 import {useDispatch, useSelector} from 'react-redux';
 import {
+  fetchActivityPageData,
   fetchIndexData,
   selectMostClaimed,
   selectMostRecent,
@@ -28,7 +29,7 @@ export default function Activity() {
 
   // Meanwhile get all the events
   useEffect(() => {
-    dispatch(fetchIndexData());
+    dispatch(fetchActivityPageData({}))
   }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   const [loading, setLoading] = useState(false)
@@ -87,6 +88,7 @@ export default function Activity() {
       // Filter ongoing private events
       .filter(t => {
         // Check if transfer belongs to a private event
+        // TODO: with the pagination changes this check must be done with the server now
         const privateEvent = privateEvents.find(e => e.id === t.token.event.id)
         if (privateEvent === undefined) return true;
 

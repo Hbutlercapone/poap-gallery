@@ -1,17 +1,17 @@
 import {
   getEvent,
-  getEvents,
-  getMainnetEvents,
+  getMainnetEvents, getMainnetEventsByIds,
   getMainnetOwners,
-  getMainnetTokens,
-  getxDaiEvents,
+  getMainnetTokens, getPaginatedEvents,
+  getxDaiEvents, getxDaiEventsByIds,
   getXDaiOwners,
-  getxDaiTokens
+  getxDaiTokens, OrderDirection, OrderOption, PAGE_LIMIT
 } from './api'
 import {ensABI} from './abis';
 import _, {uniqBy} from 'lodash'
 import {ethers} from 'ethers';
 import namehash from 'eth-ens-namehash';
+import {sortInt} from "../utilities/utilities";
 
 const {REACT_APP_RPC_PROVIDER_URL, REACT_APP_ENS_CONTRACT} = process.env;
 const provider = new ethers.providers.StaticJsonRpcProvider(REACT_APP_RPC_PROVIDER_URL);
@@ -45,35 +45,71 @@ export async function getEnsData(ownerIds){
   return allnames
 }
 
-export async function getIndexPageData() {
-  let [poapEvents, graphEvents, xdaiEvents] = await Promise.all([getEvents(), getMainnetEvents(), getxDaiEvents()])
-
-  if (graphEvents && graphEvents.data && graphEvents.data.events) {
-    graphEvents = graphEvents.data.events
+function pushEvent(events, event) {
+  const sameEvent = events.find(e => e.id === event.id)
+  if (sameEvent) {
+    sameEvent.tokenCount += event.tokenCount
+    sameEvent.transferCount += event.transferCount
   } else {
-    graphEvents = []
+    events.push(event)
   }
+}
 
-  if (xdaiEvents && xdaiEvents.data && xdaiEvents.data.events) {
-    xdaiEvents = xdaiEvents.data.events
-    graphEvents = graphEvents.concat(xdaiEvents)
-  }
+function reduceSubgraphEvents(mainnetEvents, xdaiEvents) {
+  mainnetEvents = mainnetEvents.data.events.sort(sortInt)
+  xdaiEvents = xdaiEvents.data.events.sort(sortInt)
 
-  let mostRecent, upcoming, mostClaimed;
-
-  let isMostRecent = false
-
-  for (let i = 0; i < poapEvents.length; i++) {
-    const event = poapEvents[i];
-    event.tokenCount = 0
-    event.transferCount = 0
-    for (let j = 0; j < graphEvents.length; j++) {
-      const graphEvent = graphEvents[j];
-      if(event.id === parseInt(graphEvent.id)) {
-        event.tokenCount += parseInt(graphEvent.tokenCount)
-        event.transferCount += parseInt(graphEvent.transferCount)
-      }
+  let subgraphEvents = [], mainnetIndex = 0, xdaiIndex = 0, canKeepIterating = true
+  while (canKeepIterating) {
+    if (subgraphEvents.length === PAGE_LIMIT || (mainnetIndex >= mainnetEvents.length && xdaiIndex >= xdaiEvents.length)) {
+      break
     }
+
+    const mainnetEvent = mainnetIndex < mainnetEvents.length ? mainnetEvents[mainnetIndex] : null
+    const xdaiEvent = xdaiIndex < xdaiEvents.length ? xdaiEvents[xdaiIndex] : null
+    if (mainnetEvent === null && xdaiEvent) {
+      pushEvent(subgraphEvents, xdaiEvent)
+      xdaiIndex++
+    } else if (xdaiEvent === null && mainnetEvent) {
+      pushEvent(subgraphEvents, mainnetEvent)
+      mainnetIndex++
+    } else if (mainnetEvent.id > xdaiEvent.id) {
+      pushEvent(subgraphEvents, mainnetEvent)
+      mainnetIndex++
+    } else {
+      pushEvent(subgraphEvents, xdaiEvent)
+      xdaiIndex++
+    }
+  }
+  return {
+    subgraphEvents,
+    mainnetIndex,
+    xdaiIndex
+  }
+}
+
+function aggregateEventsData(events, subgraphEvents) {
+  let lastValidEventIndex = 0
+  const _events = events.map((e, index) => {
+    const subgraphMatch = subgraphEvents.find(s => parseInt(s.id) === e.id)
+    if (subgraphMatch) {
+      lastValidEventIndex = index
+      return {...e, tokenCount: parseInt(subgraphMatch.tokenCount), transferCount: parseInt(subgraphMatch.transferCount)}
+    }
+    return false
+  })
+  return {
+    filteredEvents: _events.filter(e => e),
+    apiIndex: lastValidEventIndex,
+  }
+}
+
+function getTop3Events() {
+  //TODO: change all of this with custom server call
+  let mostRecent, mostClaimed, upcoming, events = []
+  let isMostRecent = false
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
     let now = new Date().getTime()
     let eventDate = new Date(event.start_date.replace(/-/g, ' ')).getTime()
     let eventEndDate = new Date(event.end_date.replace(/-/g, ' ')).getTime()
@@ -83,11 +119,12 @@ export async function getIndexPageData() {
       continue;
     }
 
+    //TODO: check logic for all 3
     if(eventDate > now ) {
       upcoming = event
     }
 
-    if(eventDate < now && isMostRecent === false) {
+    if(eventDate < now && !isMostRecent) {
       isMostRecent = true
       mostRecent = event
     }
@@ -102,7 +139,111 @@ export async function getIndexPageData() {
   if (mostClaimed) mostClaimed.heading = "Most Claimed Token"
 
   return {
-    poapEvents: poapEvents,
+    mostRecent,
+    mostClaimed,
+    upcoming,
+  }
+}
+
+async function getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy) {
+  let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEvents(PAGE_LIMIT, mainnetSkip, orderBy), getxDaiEvents(PAGE_LIMIT, xdaiSkip, orderBy)])
+  let {subgraphEvents, mainnetIndex, xdaiIndex} = reduceSubgraphEvents(mainnetEvents, xdaiEvents)
+
+  const event_ids = subgraphEvents.map(e => e.id).join(',')
+  let paginatedResults = await getPaginatedEvents({event_ids, limit: subgraphEvents.length})
+  let {filteredEvents, apiIndex} = aggregateEventsData(paginatedResults.items, subgraphEvents)
+  const total = paginatedResults.total
+
+  return {
+    _events: filteredEvents,
+    mainnetIndex: mainnetIndex,
+    xdaiIndex: xdaiIndex,
+    _total: total,
+  }
+}
+
+async function getEventsByApiFirst(apiSkip, orderBy, privateEvents) {
+  let events = [], total = 0, offset = apiSkip, batchSize = PAGE_LIMIT*5, apiIndex = 0
+  while (events.length < PAGE_LIMIT) {
+    let paginatedResults = await getPaginatedEvents({offset: offset, limit: batchSize, orderBy: orderBy, privateEvents: privateEvents})
+    offset += batchSize
+    let _events = paginatedResults.items
+    total = paginatedResults.total
+    const event_ids = _events.map(e => e.id)
+
+    const missingAmount = PAGE_LIMIT - events.length
+    let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEventsByIds(event_ids, missingAmount), getxDaiEventsByIds(event_ids, missingAmount)])
+    let {subgraphEvents} = reduceSubgraphEvents(mainnetEvents, xdaiEvents)
+    let {filteredEvents, apiIndex: _apiIndex} = aggregateEventsData(_events, subgraphEvents)
+    events = events.concat(filteredEvents)
+    apiIndex = _apiIndex
+  }
+
+  //TODO: verify no more than PAGE_LIMIT events are returned (ex: try putting 3 as batchSize and check if it returns 20 or something like 21)
+  return {
+    _events: events,
+    _total: total,
+    apiIndex: apiIndex,
+  }
+}
+
+export async function getIndexPageData(orderBy, reset, privateEvents, state) {
+  let apiSkip, mainnetSkip, xdaiSkip, page
+  if (reset) {
+    page = 0
+    apiSkip = 0
+    xdaiSkip = 0
+    mainnetSkip = 0
+  } else {
+    page = state.events.page
+    apiSkip = state.events.apiSkip
+    xdaiSkip = state.events.xdaiSkip
+    mainnetSkip = state.events.mainnetSkip
+  }
+
+  let events, total
+  if (orderBy.type === OrderOption.tokenCount.val || orderBy.type === OrderOption.transferCount.val) {
+    //TODO: investigate duplicate events being fetched (probably skips' issues)
+    let {_events, mainnetIndex, xdaiIndex, _total} = await getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy)
+    mainnetSkip += mainnetIndex
+    xdaiSkip += xdaiIndex
+    events = _events
+    total = _total
+  } else {
+    const {_events, _total, apiIndex} = await getEventsByApiFirst(apiSkip, orderBy, privateEvents)
+    events = _events
+    total = _total
+    apiSkip += apiIndex
+  }
+
+  return {
+    poapEvents: events.sort((e1, e2) => {
+      let comp1, comp2
+      switch (orderBy.type) {
+        case OrderOption.date.val:
+          comp1 = new Date(e1[orderBy.type])
+          comp2 = new Date(e2[orderBy.type])
+          break
+        default:
+          comp1 = e1[orderBy.type]
+          comp2 = e2[orderBy.type]
+      }
+      return (comp1 > comp2 ? 1 : -1) * (orderBy.order === OrderDirection.ascending ? 1 : -1)
+    }),
+    total: total,
+    apiSkip: apiSkip,
+    mainnetSkip: mainnetSkip,
+    xdaiSkip: xdaiSkip,
+    page: page
+  }
+}
+
+export async function getActivityPageData() {
+
+  // const {mostRecent, mostClaimed, upcoming} = getTop3Events() //TODO: this need a custom server call (right now it's making a top 3 of a limited number of events)
+  let mostRecent, mostClaimed, upcoming
+
+  return {
     mostRecent: mostRecent,
     mostClaimed: mostClaimed,
     upcoming: upcoming,
