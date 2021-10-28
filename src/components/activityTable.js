@@ -104,18 +104,18 @@ function Transfer({transfer}) {
             {
               (type === 'Claim')?
               <span> POAP claimed on event
-                {' '}<Link to={`/event/${transfer.token.event.id}`}>#{transfer.token.event.id}</Link>
+                {' '}<object><Link to={`/event/${transfer.token.event.id}`}>#{transfer.token.event.id}</Link></object>
                 {' '}on {transfer.network}
               </span> :
               (type === 'Transfer')?
               <span>POAP transferred from
-                <a href={"https://app.poap.xyz/scan/" + transfer.from.id} target="_blank"  rel="noopener noreferrer"> {transfer.from.id.substring(0, 8) + '…'} </a> to 
-                <a href={"https://app.poap.xyz/scan/" + transfer.to.id} target="_blank"  rel="noopener noreferrer"> {transfer.to.id.substring(0, 8) + '…'} </a>
+                <object><a href={"https://app.poap.xyz/scan/" + transfer.from.id} target="_blank"  rel="noopener noreferrer"> {transfer.from.id.substring(0, 8) + '…'} </a></object> to
+                <object><a href={"https://app.poap.xyz/scan/" + transfer.to.id} target="_blank"  rel="noopener noreferrer"> {transfer.to.id.substring(0, 8) + '…'} </a></object>
                  on {transfer.network}
               </span> :
               (type === 'Migration')?
               <span> POAP migrated to 
-                <a href={"https://app.poap.xyz/scan/" + transfer.to.id} target="_blank"  rel="noopener noreferrer"> {transfer.to.id.substring(0, 16) + '…'} </a>
+                <object><a href={"https://app.poap.xyz/scan/" + transfer.to.id} target="_blank"  rel="noopener noreferrer"> {transfer.to.id.substring(0, 16) + '…'} </a></object>
                 from {transfer.network} to Ethereum
               </span> :
               (type === 'Burn')?
