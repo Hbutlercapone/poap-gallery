@@ -17,11 +17,13 @@ import { Foliage } from '../components/foliage';
 import {dateCell, shrinkAddress} from '../utilities/utilities';
 import { useWindowWidth } from '@react-hook/window-size/throttled';
 import OpenLink from '../assets/images/openLink.svg'
+import {toast, Toaster} from "react-hot-toast";
+import styled from "styled-components";
 
 const GRAPH_LIMIT = 1000;
-const CanDownloadCsvStatus = {
-  NotReady: 'NotReady',
-  OnLastStep: 'OnLastStep',
+const CSV_STATUS = {
+  DownloadingData: 'DownloadingData',
+  DownloadingLastDataChunk: 'DownloadingLastDataChunk',
   ReadyWithoutEns: 'ReadyWithoutEns',
   Ready: 'Ready',
 }
@@ -41,6 +43,10 @@ export default function Events() {
   );
 }
 
+const CSVLinkText = styled.span`
+  margin: 0;
+`
+
 export function Event() {
   const params = useParams();
   const { eventId } = params;
@@ -54,10 +60,14 @@ export function Event() {
   const [data, setData] = useState([]);
   const [csv_data, setCsv_data] = useState([]);
   const [ensNames, setEnsNames] = useState([]);
-  const [canDownloadCsv, setCanDownloadCsv] = useState(CanDownloadCsvStatus.NotReady);
+  const [canDownloadCsv, setCanDownloadCsv] = useState(CSV_STATUS.DownloadingData);
   const width = useWindowWidth();
   const pageCount = useMemo( () => event.tokenCount % 50 !== 0 ? Math.floor(event.tokenCount / 50) + 1 : event.tokenCount, [event])
   const power = calculatePower(csv_data);
+
+  const csvDownloadIsOnLastStep = () => {return canDownloadCsv === CSV_STATUS.DownloadingLastDataChunk}
+  const csvReadyOrAlmostReady = () => {return canDownloadCsv === CSV_STATUS.Ready || canDownloadCsv === CSV_STATUS.ReadyWithoutEns}
+  const csvOnlyMissingEns = () => {return canDownloadCsv === CSV_STATUS.ReadyWithoutEns}
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -85,7 +95,7 @@ export function Event() {
     const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
     if (event && tokens && tokens.length > 0 && pageIndex < totalPages) {
       if (pageIndex + 1 === totalPages) {
-        setCanDownloadCsv(CanDownloadCsvStatus.OnLastStep)
+        setCanDownloadCsv(CSV_STATUS.DownloadingLastDataChunk)
       }
       setPageIndex(pageIndex + 1);
     }
@@ -134,17 +144,19 @@ export function Event() {
   }, [ensNames]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
   useEffect(() => {
-    if (loadingEvent === 'succeeded' && canDownloadCsv === CanDownloadCsvStatus.OnLastStep) {
-      // Finished last step, all token data is available (except for ens data)
-      setCanDownloadCsv(CanDownloadCsvStatus.ReadyWithoutEns)
+    if (loadingEvent === 'succeeded' && csvDownloadIsOnLastStep()) {
+      setCanDownloadCsv(CSV_STATUS.ReadyWithoutEns)
       let ownerIds = tokens.map(t => t.owner.id)
       getEnsData(ownerIds).then(allnames => {
         if(allnames.length > 0){
           setEnsNames(allnames)
         }
-        setCanDownloadCsv(CanDownloadCsvStatus.Ready)
+        setCanDownloadCsv(CSV_STATUS.Ready)
       }).catch((e) => {
-        console.error('Error getting ens data. ', e)
+        // Todo add final toast format and text
+        toast.error(`Could not get ENS data (You can download CSV without ENS resolution or try again later)`, {
+          duration: 10000
+        })
       })
     }
   }, [loadingEvent]) /* eslint-disable-line react-hooks/exhaustive-deps */
@@ -197,104 +209,80 @@ export function Event() {
     boxShadow: '0 6px 18px 0 #6534FF4D',
   }
 
-  if (loadingEvent === 'loading' || loadingEvent === 'idle') {
-    return (
-      <main id="site-main" role="main" className="app-content event-main">
-        <Helmet>
-          <title>POAP Gallery - Event</title>
-          <link rel="canonical" href={"https://poap.gallery/event/" + eventId}/>
-          <meta property="og:url" content={"https://poap.gallery/event/" + eventId}/>
-          <meta property="og:title" content="POAP Gallery - Event"/>
-        </Helmet>
-        <Foliage />
-        <div style={{display: 'flex', justifyContent: 'center'}}>
-          <Loader />
-        </div>
-      </main>
-    )
-  }
-
-  if (errorEvent || Object.keys(event).length === 0) {
-    return (
-      <main id="site-main" role="main" className="app-content event-main">
-        <Helmet>
-          <title>POAP Gallery - Event</title>
-          <link rel="canonical" href={"https://poap.gallery/event/" + eventId}/>
-          <meta property="og:url" content={"https://poap.gallery/event/" + eventId}/>
-          <meta property="og:title" content="POAP Gallery - Event"/>
-        </Helmet>
-        <Foliage />
-        <div style={{display: 'flex', justifyContent: 'center', flexDirection: 'column', margin: '0 auto', textAlign: 'center'}}>
-          <h2>{errorEvent || 'Token not found'}</h2>
-          <div >
-            <img alt="warning sign" style={{maxWidth: '30rem'}} src="/icons/warning.svg"/>
-          </div>
-        </div>
-      </main>
-    )
-  }
-
   return (
-    <main id="site-main" role="main" className="app-content event-main">
-      <Helmet>
-        <title>POAP Gallery - Event</title>
-        <link rel="canonical" href={"https://poap.gallery/event/" + eventId}/>
-        <meta property="og:url" content={"https://poap.gallery/event/" + eventId}/>
-        <meta property="og:title" content="POAP Gallery - Event"/>
-      </Helmet>
-      <Foliage />
-      <div className="container">
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          alignContent: 'space-around',
-          justifyContent: 'space-around',
-          marginBottom: 82,
-          }}>
-          <div style={{flex: '0 0 18rem', display: 'flex', flexDirection: "column", justifyContent: "center"}}>
-            <div className='prev-next-buttons' style={{display: 'flex', justifyContent: 'space-between', marginBottom: 38,}}>
-              <a href={parseInt(eventId)-1} ><FontAwesomeIcon icon={faAngleLeft}/>{'  Prev'}</a>
-              <h4 style={{marginBottom: '0'}}><div className='event-title'>EVENT ID</div><div className='event-id'>#{eventId}</div> </h4>
-              <a href={parseInt(eventId)+1} >{'Next  '}<FontAwesomeIcon icon={faAngleRight}/></a>
+      <main id="site-main" role="main" className="app-content event-main">
+        <Helmet>
+          <title>POAP Gallery - Event</title>
+          <link rel="canonical" href={"https://poap.gallery/event/" + eventId}/>
+          <meta property="og:url" content={"https://poap.gallery/event/" + eventId}/>
+          <meta property="og:title" content="POAP Gallery - Event"/>
+        </Helmet>
+        <Foliage />
+        {
+          loadingEvent === 'loading' || loadingEvent === 'idle' ?
+              <div style={{display: 'flex', justifyContent: 'center'}}>
+                <Loader />
+              </div> :
+          errorEvent || Object.keys(event).length === 0 ?
+            <div style={{display: 'flex', justifyContent: 'center', flexDirection: 'column', margin: '0 auto', textAlign: 'center'}}>
+              <h2>{errorEvent || 'Token not found'}</h2>
+              <div >
+                <img alt="warning sign" style={{maxWidth: '30rem'}} src="/icons/warning.svg"/>
+              </div>
+            </div> :
+            <div className="container">
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                alignContent: 'space-around',
+                justifyContent: 'space-around',
+                marginBottom: 82,
+              }}>
+                <div style={{flex: '0 0 18rem', display: 'flex', flexDirection: "column", justifyContent: "center"}}>
+                  <div className='prev-next-buttons' style={{display: 'flex', justifyContent: 'space-between', marginBottom: 38,}}>
+                    <a href={parseInt(eventId)-1} ><FontAwesomeIcon icon={faAngleLeft}/>{'  Prev'}</a>
+                    <h4 style={{marginBottom: '0'}}><div className='event-title'>EVENT ID</div><div className='event-id'>#{eventId}</div> </h4>
+                    <a href={parseInt(eventId)+1} >{'Next  '}<FontAwesomeIcon icon={faAngleRight}/></a>
+                  </div>
+                  <div style={{minHeight: '200px', margin: '0 auto'}}>
+                    <EventCard key={0} event={event} size='l' power={power} />
+                  </div>
+                </div>
+              </div>
+              <div className='table-header'>
+                <div className='table-title'>Collections <span>({tokens.length})</span></div>
+                {csvReadyOrAlmostReady() ?
+                  <CSVLink
+                      filename={`${event.name}.csv`}
+                      target="_blank"
+                      data-tip={`${csvOnlyMissingEns() ? 'Please wait if you want the ens names too' : ''}`}
+                      className={'btn'}
+                      style={csvButtonStyle}
+                      data={csv_data}
+                  >
+                    <CSVLinkText>{`Download CSV${csvOnlyMissingEns() ? ' (without ens)' : ''}`}</CSVLinkText>
+                    <ReactTooltip effect={'solid'} />
+                  </CSVLink> :
+                  <button
+                      className={'btn button-disabled'}
+                      style={csvButtonStyle}
+                      data-tip={'Please wait for the POAPs data to be loaded'}
+                      onClick={null}
+                  ><span style={{margin: 0}}>Download CSV</span><ReactTooltip effect={'solid'} /></button>
+                }
+              </div>
+              <div className='table-container'>
+                {
+                  width > 480
+                      ? <CreateTable event={event} loading={loadingEvent !== 'succeeded'} columns={columns} data={data} pageCount={pageCount} />
+                      : <CreateMobileTable event={event} loading={loadingEvent !== 'succeeded'} columns={mobileColumns} data={data} pageCount={pageCount} />
+                }
+              </div>
             </div>
-            <div style={{minHeight: '200px', margin: '0 auto'}}>
-              <EventCard key={0} event={event} size='l' power={power} />
-            </div>
-          </div>
-        </div>
-        <div className='table-header'>
-          <div className='table-title'>Collections <span>({tokens.length})</span></div>
-          {canDownloadCsv === CanDownloadCsvStatus.Ready || canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ?
-            <CSVLink
-              filename={`${event.name}.csv`}
-              target="_blank"
-              data-tip={`${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? 'Please wait if you want the ens names too' : ''}`}
-              className={'btn'}
-              style={csvButtonStyle}
-              data={csv_data}
-            >
-              <span style={{margin: 0}}>{`Download CSV${canDownloadCsv === CanDownloadCsvStatus.ReadyWithoutEns ? ' (without ens)' : ''}`}</span>
-              <ReactTooltip effect={'solid'} />
-            </CSVLink> :
-            <button
-                className={'btn button-disabled'}
-                style={csvButtonStyle}
-                data-tip={'Please wait for the POAPs data to be loaded'}
-                onClick={null}
-            ><span style={{margin: 0}}>Download CSV</span><ReactTooltip effect={'solid'} /></button>
-          }
-        </div>
-        <div className='table-container'>
-          {
-            width > 480
-            ? <CreateTable event={event} loading={loadingEvent !== 'succeeded'} columns={columns} data={data} pageCount={pageCount} />
-            : <CreateMobileTable event={event} loading={loadingEvent !== 'succeeded'} columns={mobileColumns} data={data} pageCount={pageCount} />
-          }
-        </div>
-      </div>
-    </main>
-  );
+        }
+      </main>
+  )
 }
 
 function ExternalLinkCell({url, tooltipText = null, content}) {

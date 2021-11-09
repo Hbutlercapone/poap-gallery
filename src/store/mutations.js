@@ -12,6 +12,8 @@ import {ensABI} from './abis';
 import _, {uniqBy} from 'lodash'
 import {ethers} from 'ethers';
 import namehash from 'eth-ens-namehash';
+import {toast} from "react-hot-toast";
+import {toastInfoOptions} from "../utilities/utilities";
 
 const {REACT_APP_RPC_PROVIDER_URL, REACT_APP_ENS_CONTRACT} = process.env;
 const provider = new ethers.providers.StaticJsonRpcProvider(REACT_APP_RPC_PROVIDER_URL);
@@ -36,7 +38,9 @@ export async function getEnsData(ownerIds){
       try {
         return (namehash.normalize(name) === name && name !== '') && name
       } catch (e) {
-        console.error('Couldn\'t parse ENS name. ', e)
+        if (name && name.length) {
+          toast.error(`Couldn\'t parse ENS name '${name}'.`, toastInfoOptions)
+        }
         return false
       }
     } )

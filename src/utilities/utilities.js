@@ -33,3 +33,10 @@ export const dateCell = (cell, dateFormat) => {
   }
   return dayjs(cell.value).fromNow()
 }
+
+export const toastInfoOptions = {
+  icon: '',
+  style: {
+    backgroundColor: '#fff8e0'
+  }
+}

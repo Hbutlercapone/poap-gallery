@@ -58,6 +58,7 @@ function Header({type, event}) {
 const DiscreetParagraph = styled.p`
   margin: 0;
   color: var(--grayscale5);
+  word-break: break-word;
 `
 
 function Content({type, width, size, event, power}) {
