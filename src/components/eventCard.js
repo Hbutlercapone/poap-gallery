@@ -9,6 +9,7 @@ import ReactModal from 'react-modal';
 import Power from '../assets/images/power.svg';
 import Transfers from '../assets/images/transfers.svg';
 import Supply from '../assets/images/supply.svg';
+import styled from "styled-components";
 
 export function EventCard({ event, size = 's', type = '', power = 0}) {
   const width = useWindowWidth();
@@ -54,6 +55,11 @@ function Header({type, event}) {
     </div>
 }
 
+const DiscreetParagraph = styled.p`
+  margin: 0;
+  color: var(--grayscale5);
+`
+
 function Content({type, width, size, event, power}) {
     const [tokenCount, setTokenCount] = useState(0);
     const [transferCount, setTransferCount] = useState(0);
@@ -70,7 +76,7 @@ function Content({type, width, size, event, power}) {
     }, [event, transferCount])
 
     const nl2br = (text) => (text.split('\n').map(item => {
-        return <React.Fragment key={item.toString()}>{item}<br/></React.Fragment>
+      return <DiscreetParagraph key={item.toString()}>{item}</DiscreetParagraph>
     }));
 
     return (
