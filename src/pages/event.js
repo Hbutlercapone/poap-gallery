@@ -17,7 +17,7 @@ import { Foliage } from '../components/foliage';
 import {dateCell, shrinkAddress} from '../utilities/utilities';
 import { useWindowWidth } from '@react-hook/window-size/throttled';
 import OpenLink from '../assets/images/openLink.svg'
-import {toast, Toaster} from "react-hot-toast";
+import {toast} from "react-hot-toast";
 import styled from "styled-components";
 
 const GRAPH_LIMIT = 1000;

@@ -39,7 +39,7 @@ export async function getEnsData(ownerIds){
         return (namehash.normalize(name) === name && name !== '') && name
       } catch (e) {
         if (name && name.length) {
-          toast.error(`Couldn\'t parse ENS name '${name}'.`, toastInfoOptions)
+          toast.error(`Couldn't parse ENS name '${name}'.`, toastInfoOptions)
         }
         return false
       }
