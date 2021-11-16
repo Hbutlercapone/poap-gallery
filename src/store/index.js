@@ -18,13 +18,12 @@ const initialEventsState = {
   mainnetSkip: 0,
   xdaiSkip: 0,
   page: 0,
-  totalEvents: 0,
 }
 
 export const fetchIndexData = createAsyncThunk('events/fetchIndexEvents',
-    async ({orderBy, reset, privateEvents = undefined}, thunkAPI) => getIndexPageData(orderBy, reset, privateEvents, thunkAPI.getState()))
+    async ({orderBy, reset, nameFilter, privateEvents = undefined}, thunkAPI) => getIndexPageData(orderBy, reset, nameFilter, privateEvents, thunkAPI.getState()))
 export const fetchEventPageData = createAsyncThunk('events/fetchEventPageData', async ({eventId, first, skip}) => getEventPageData(eventId, first, skip))
-export const fetchActivityPageData = createAsyncThunk('events/fetchActivityPageData', async ({}) => getActivityPageData())
+export const fetchActivityPageData = createAsyncThunk('events/fetchActivityPageData', async () => getActivityPageData())
 
 
 const eventsSlice = createSlice({
@@ -33,7 +32,7 @@ const eventsSlice = createSlice({
   reducers: {},
   extraReducers: {
     [fetchIndexData.pending]: (state, action) => {
-      const reset = action.meta.arg.reset //TODO: check if this is good practice
+      const reset = action.meta.arg.reset //TODO(sebas): check if this is good practice
       if (reset) {
         state.status = 'loading'
       } else {
@@ -41,20 +40,30 @@ const eventsSlice = createSlice({
       }
     },
     [fetchIndexData.fulfilled]: (state, action) => {
-      const { poapEvents, apiSkip, mainnetSkip, xdaiSkip, total, page } = action.payload
+      const { poapEvents, apiSkip, mainnetSkip, xdaiSkip, page } = action.payload
 
+      console.log({page, poapEvents, apiSkip, mainnetSkip, xdaiSkip})
+      console.log([...state.events])
       if (page === 0) {
         state.events = poapEvents
-        state.page = 1
       } else {
-        state.events = current(state.events).concat(poapEvents)
-        state.page++
+        poapEvents.forEach(poapE => {
+          const match = state.events.find(e => e.id === poapE.id)
+          if (match) {
+            match.tokenCount += poapE.tokenCount
+            match.transferCount += poapE.transferCount
+          } else {
+            state.events.push(poapE)
+          }
+        })
       }
+      state.page++
+      console.log([...state.events])
 
-      state.apiSkip = apiSkip //TODO: use these skips
+
+      state.apiSkip = apiSkip
       state.mainnetSkip = mainnetSkip
       state.xdaiSkip = xdaiSkip
-      state.totalEvents = total //TODO: may not need it, check
       state.status = 'succeeded'
     },
     [fetchIndexData.rejected]: (state, action) => {

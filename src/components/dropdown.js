@@ -1,23 +1,30 @@
-import React, { useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import Arrow from '../assets/images/angle_down.svg';
 
-export default function Dropdown({title, options, defaultOption, onClickOption}) {
+export default function Dropdown({options, resetSignal, defaultOption, onClickOption}) {
   
-  const [_title, setTitle] = useState(title)
+  const [_title, setTitle] = useState(defaultOption.name)
   const [displayMenu, setDisplayMenu] = useState(false)
 
   const toggleDisplayMenu = () => {
     setDisplayMenu(!displayMenu)
   }
 
+  const reset = () => {
+    setTitle(defaultOption.name)
+  }
+
+  useEffect(() => {
+    reset()
+  }, [resetSignal]) /* eslint-disable-line react-hooks/exhaustive-deps */
+
   let optionsElements = []
   for(let i = 0; i < options.length; i++) {
     const option = options[i]
     optionsElements.push(
-      <div key={option.name} className={`option ${option.name === defaultOption?'active':''}`} onClick={() => {
+      <div key={option.name} className={`option`} onClick={() => {
         setTitle(option.name)
         toggleDisplayMenu()
-        //TODO: missing change active styling?
         onClickOption(option)
       }}>{option.name}</div>
     )

@@ -8,7 +8,7 @@ export const OrderOption = {
     val: 'id'
   },
   tokenCount: {
-    name: 'Holders',
+    name: 'Supply',
     val: 'tokenCount'
   },
   transferCount: {
@@ -22,7 +22,7 @@ export const OrderOption = {
   city: {
     name: 'City',
     val: 'city'
-  }, //TODO: add sorting by city in api
+  },
 }
 export const OrderDirection = {
   ascending: {
@@ -36,11 +36,6 @@ export const OrderDirection = {
 }
 
 export const PAGE_LIMIT = 20
-
-export async function getEvents() {
-  const res = await fetch(`${POAP_API_URL}/events`)
-  return res.json()
-}
 
 export async function getPaginatedEvents({name = undefined, event_ids = undefined,
                                            offset = undefined, limit = undefined,
@@ -279,7 +274,7 @@ export async function getMigrations(amount) {
 
 export async function validateMigrations(migrations) {
   // Step 2: Verify the minted tokens have a burned counterpart in layer 2
-  // TODO: add polygon check when we implement POAPs in the polygon chain
+  // TODO(sebas): add polygon check when we implement POAPs in the polygon chain
   const ids = migrations.map(t => "\"" + t.id + "\"").join(',')
   const res2 = await fetch(XDAI_SUBGRAPH_URL, {
     method: 'POST',
@@ -308,4 +303,9 @@ export async function validateMigrations(migrations) {
     })
   })
   return res2.json()
+}
+
+export async function getTop3Events() {
+  const res = await fetch(`${POAP_API_URL}/top-3-events`) //TODO(sebas): test endpoint
+  return res.json()
 }

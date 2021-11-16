@@ -2,16 +2,15 @@ import {
   getEvent,
   getMainnetEvents, getMainnetEventsByIds,
   getMainnetOwners,
-  getMainnetTokens, getPaginatedEvents,
+  getMainnetTokens, getPaginatedEvents, getTop3Events,
   getxDaiEvents, getxDaiEventsByIds,
   getXDaiOwners,
   getxDaiTokens, OrderDirection, OrderOption, PAGE_LIMIT
 } from './api'
 import {ensABI} from './abis';
-import _, {uniqBy} from 'lodash'
+import _, {parseInt, uniqBy} from 'lodash'
 import {ethers} from 'ethers';
 import namehash from 'eth-ens-namehash';
-import {sortInt} from "../utilities/utilities";
 
 const {REACT_APP_RPC_PROVIDER_URL, REACT_APP_ENS_CONTRACT} = process.env;
 const provider = new ethers.providers.StaticJsonRpcProvider(REACT_APP_RPC_PROVIDER_URL);
@@ -45,40 +44,56 @@ export async function getEnsData(ownerIds){
   return allnames
 }
 
-function pushEvent(events, event) {
+function normalizeSubgraphEvents(subgraphEvents) {
+  subgraphEvents.forEach(m => {
+    m.id = parseInt(m.id)
+    m.tokenCount = parseInt(m.tokenCount)
+    m.transferCount = parseInt(m.transferCount)
+  })
+}
+
+function pushEvent(events, event, chainId) {
   const sameEvent = events.find(e => e.id === event.id)
   if (sameEvent) {
-    sameEvent.tokenCount += event.tokenCount
-    sameEvent.transferCount += event.transferCount
+    sameEvent.tokenCount += parseInt(event.tokenCount)
+    sameEvent.transferCount += parseInt(event.transferCount)
+    sameEvent.chainId += `-${chainId}`
   } else {
+    event.tokenCount = parseInt(event.tokenCount)
+    event.transferCount = parseInt(event.transferCount)
+    event.chainId = chainId
     events.push(event)
   }
 }
 
-function reduceSubgraphEvents(mainnetEvents, xdaiEvents) {
-  mainnetEvents = mainnetEvents.data.events.sort(sortInt)
-  xdaiEvents = xdaiEvents.data.events.sort(sortInt)
+function reduceSubgraphEvents(mainnetEvents, xdaiEvents, orderBy) {
+  mainnetEvents = mainnetEvents.data.events
+  xdaiEvents = xdaiEvents.data.events
+  normalizeSubgraphEvents(mainnetEvents)
+  normalizeSubgraphEvents(xdaiEvents)
 
-  let subgraphEvents = [], mainnetIndex = 0, xdaiIndex = 0, canKeepIterating = true
-  while (canKeepIterating) {
-    if (subgraphEvents.length === PAGE_LIMIT || (mainnetIndex >= mainnetEvents.length && xdaiIndex >= xdaiEvents.length)) {
-      break
-    }
-
-    const mainnetEvent = mainnetIndex < mainnetEvents.length ? mainnetEvents[mainnetIndex] : null
-    const xdaiEvent = xdaiIndex < xdaiEvents.length ? xdaiEvents[xdaiIndex] : null
-    if (mainnetEvent === null && xdaiEvent) {
-      pushEvent(subgraphEvents, xdaiEvent)
+  let subgraphEvents = [], mainnetIndex = 0, xdaiIndex = 0
+  while (mainnetIndex < mainnetEvents.length || xdaiIndex < xdaiEvents.length) {
+    const mainnetEvent = mainnetEvents[mainnetIndex]
+    const xdaiEvent = xdaiEvents[xdaiIndex]
+    if (mainnetEvent === undefined && xdaiEvent) {
+      pushEvent(subgraphEvents, xdaiEvent, 'xdai')
       xdaiIndex++
-    } else if (xdaiEvent === null && mainnetEvent) {
-      pushEvent(subgraphEvents, mainnetEvent)
-      mainnetIndex++
-    } else if (mainnetEvent.id > xdaiEvent.id) {
-      pushEvent(subgraphEvents, mainnetEvent)
+    } else if (xdaiEvent === undefined && mainnetEvent) {
+      pushEvent(subgraphEvents, mainnetEvent, 'mainnet')
       mainnetIndex++
     } else {
-      pushEvent(subgraphEvents, xdaiEvent)
-      xdaiIndex++
+      const mainnetNext =
+          (mainnetEvent[orderBy.type] < xdaiEvent[orderBy.type] && orderBy.order === OrderDirection.ascending.val) ||
+          (mainnetEvent[orderBy.type] > xdaiEvent[orderBy.type] && orderBy.order === OrderDirection.descending.val)
+      console.log(`order: ${orderBy.order}, ${mainnetEvent[orderBy.type]} < ${xdaiEvent[orderBy.type]}: ${mainnetEvent[orderBy.type] < xdaiEvent[orderBy.type]}. ${mainnetNext ? 'mainnet' : 'xdai'} won`)
+      if ( mainnetNext ) {
+        pushEvent(subgraphEvents, mainnetEvent, 'mainnet')
+        mainnetIndex++
+      } else {
+        pushEvent(subgraphEvents, xdaiEvent, 'xdai')
+        xdaiIndex++
+      }
     }
   }
   return {
@@ -89,105 +104,159 @@ function reduceSubgraphEvents(mainnetEvents, xdaiEvents) {
 }
 
 function aggregateEventsData(events, subgraphEvents) {
-  let lastValidEventIndex = 0
-  const _events = events.map((e, index) => {
-    const subgraphMatch = subgraphEvents.find(s => parseInt(s.id) === e.id)
-    if (subgraphMatch) {
-      lastValidEventIndex = index
-      return {...e, tokenCount: parseInt(subgraphMatch.tokenCount), transferCount: parseInt(subgraphMatch.transferCount)}
+  subgraphEvents.forEach(sEvent => {
+    const eventMatch = events.find(e => parseInt(sEvent.id) === e.id)
+    if (eventMatch) {
+      if (eventMatch.tokenCount && eventMatch.transferCount) {
+        eventMatch.tokenCount += sEvent.tokenCount
+        eventMatch.transferCount += sEvent.transferCount
+      } else {
+        eventMatch.tokenCount = sEvent.tokenCount
+        eventMatch.transferCount = sEvent.transferCount
+      }
     }
-    return false
   })
+}
+
+function aggregateSubgraphEventsData(events, subgraphEvents) {
+  events.forEach(event => {
+    const sEventMatch = subgraphEvents.find(e => parseInt(event.id) === e.id)
+    if (sEventMatch) {
+      Object.assign(sEventMatch, event)
+    }
+  })
+}
+
+function limitApiEvents(events, limit) {
+  if (!events || events.length === 0) {
+    return {
+      limitedEvents: [],
+      _apiIndex: 0
+    }
+  }
+
+  const limitedEvents = []
+  let _apiIndex
+  events.forEach((e, idx) => {
+    if (e.tokenCount && e.transferCount) {
+      // TODO(sebas): test conditions and returned index
+      if (limitedEvents.length < limit) {
+        limitedEvents.push(e)
+      } else if (limitedEvents.length === limit) {
+        _apiIndex = idx - 1
+      }
+    }
+  })
+  if (_apiIndex === undefined) {
+    // TODO(sebas): test conditions and returned index
+    _apiIndex = events.length - 1
+  }
   return {
-    filteredEvents: _events.filter(e => e),
-    apiIndex: lastValidEventIndex,
+    limitedEvents,
+    _apiIndex
   }
 }
 
-function getTop3Events() {
-  //TODO: change all of this with custom server call
-  let mostRecent, mostClaimed, upcoming, events = []
-  let isMostRecent = false
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    let now = new Date().getTime()
-    let eventDate = new Date(event.start_date.replace(/-/g, ' ')).getTime()
-    let eventEndDate = new Date(event.end_date.replace(/-/g, ' ')).getTime()
-
-    if(event.private_event && eventEndDate > now) {
-      // No ongoing private event should be shown in the activity's top 3
-      continue;
-    }
-
-    //TODO: check logic for all 3
-    if(eventDate > now ) {
-      upcoming = event
-    }
-
-    if(eventDate < now && !isMostRecent) {
-      isMostRecent = true
-      mostRecent = event
-    }
-
-    if(!mostClaimed || event.tokenCount > mostClaimed.tokenCount) {
-      mostClaimed = event
+function limitSubgraphEvents(events, limit) {
+  if (!events || events.length === 0) {
+    return {
+      limitedEvents: [],
+      _mainnetIndex: 0,
+      _xdaiIndex: 0
     }
   }
 
-  if (mostRecent) mostRecent.heading = "Most Recent"
-  if (upcoming) upcoming.heading = "Upcoming Event"
-  if (mostClaimed) mostClaimed.heading = "Most Claimed Token"
+  const limitedEvents = []
+  let _mainnetIndex, _xdaiIndex, lastUsedIdx
+  events.forEach((e, idx) => {
+    // Use start_date as a way to figure out if it was a valid event in the api fetch
+    if (e.start_date) {
+      // TODO(sebas): test conditions and returned index
+      if (limitedEvents.length < limit) {
+        limitedEvents.push(e)
+      } else if (limitedEvents.length === limit) {
+        lastUsedIdx = idx
+      }
+    }
+  })
+
+  // Look for indexes
+  for (let i = events.length-1; i >= 0; i--) {
+    const event = events[i]
+    if (_mainnetIndex && _xdaiIndex) break
+    if (event.chainId.includes('xdai')) {
+      _xdaiIndex = i
+    }
+    if (event.chainId.includes('mainnet')) {
+      _mainnetIndex = i
+    }
+  }
 
   return {
-    mostRecent,
-    mostClaimed,
-    upcoming,
+    limitedEvents,
+    _mainnetIndex,
+    _xdaiIndex
   }
 }
 
-async function getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy) {
-  let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEvents(PAGE_LIMIT, mainnetSkip, orderBy), getxDaiEvents(PAGE_LIMIT, xdaiSkip, orderBy)])
-  let {subgraphEvents, mainnetIndex, xdaiIndex} = reduceSubgraphEvents(mainnetEvents, xdaiEvents)
+async function getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy, missingAmount) {
+  let batchSize = PAGE_LIMIT*5
+  let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEvents(batchSize, mainnetSkip, orderBy), getxDaiEvents(batchSize, xdaiSkip, orderBy)])
+  let {subgraphEvents, mainnetIndex, xdaiIndex} = reduceSubgraphEvents(mainnetEvents, xdaiEvents, orderBy)
 
   const event_ids = subgraphEvents.map(e => e.id).join(',')
-  let paginatedResults = await getPaginatedEvents({event_ids, limit: subgraphEvents.length})
-  let {filteredEvents, apiIndex} = aggregateEventsData(paginatedResults.items, subgraphEvents)
-  const total = paginatedResults.total
+  const {items: events} = await getPaginatedEvents({event_ids, limit: event_ids.length})
+  aggregateSubgraphEventsData(events, subgraphEvents)
+  let {limitedEvents, _mainnetIndex, _xdaiIndex} = limitSubgraphEvents(subgraphEvents, missingAmount)
+  if (_mainnetIndex === undefined) {
+    // TODO(sebas): test conditions and returned index
+    _mainnetIndex = batchSize
+  }
+  if (_xdaiIndex === undefined) {
+    // TODO(sebas): test conditions and returned index
+    _xdaiIndex = batchSize
+  }
 
   return {
-    _events: filteredEvents,
+    _events: limitedEvents,
     mainnetIndex: mainnetIndex,
     xdaiIndex: xdaiIndex,
-    _total: total,
   }
 }
 
-async function getEventsByApiFirst(apiSkip, orderBy, privateEvents) {
-  let events = [], total = 0, offset = apiSkip, batchSize = PAGE_LIMIT*5, apiIndex = 0
-  while (events.length < PAGE_LIMIT) {
-    let paginatedResults = await getPaginatedEvents({offset: offset, limit: batchSize, orderBy: orderBy, privateEvents: privateEvents})
-    offset += batchSize
-    let _events = paginatedResults.items
-    total = paginatedResults.total
-    const event_ids = _events.map(e => e.id)
+async function getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, missingAmount) {
+  let batchSize = PAGE_LIMIT*5
+  let paginatedResults = await getPaginatedEvents({
+    name: nameFilter,
+    offset: apiSkip,
+    limit: batchSize,
+    orderBy: orderBy,
+    privateEvents: privateEvents
+  })
 
-    const missingAmount = PAGE_LIMIT - events.length
-    let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEventsByIds(event_ids, missingAmount), getxDaiEventsByIds(event_ids, missingAmount)])
-    let {subgraphEvents} = reduceSubgraphEvents(mainnetEvents, xdaiEvents)
-    let {filteredEvents, apiIndex: _apiIndex} = aggregateEventsData(_events, subgraphEvents)
-    events = events.concat(filteredEvents)
-    apiIndex = _apiIndex
+  let apiEvents = paginatedResults.items
+  if (!apiEvents || apiEvents.length === 0) {
+    return {
+      _events: [],
+      apiIndex: batchSize
+    }
   }
 
-  //TODO: verify no more than PAGE_LIMIT events are returned (ex: try putting 3 as batchSize and check if it returns 20 or something like 21)
+  //TODO(sebas): verify no more than PAGE_LIMIT events are returned (ex: try putting 3 as batchSize and check if it returns 20 or something like 21)
+  const event_ids = apiEvents.map(e => e.id)
+
+  let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEventsByIds(event_ids), getxDaiEventsByIds(event_ids)])
+  const subgraphEvents = _.concat(mainnetEvents.data.events, xdaiEvents.data.events)
+  normalizeSubgraphEvents(subgraphEvents)
+  aggregateEventsData(apiEvents, subgraphEvents)
+  const {limitedEvents, _apiIndex} = limitApiEvents(apiEvents, missingAmount)
   return {
-    _events: events,
-    _total: total,
-    apiIndex: apiIndex,
+    _events: limitedEvents,
+    apiIndex: _apiIndex
   }
 }
 
-export async function getIndexPageData(orderBy, reset, privateEvents, state) {
+export async function getIndexPageData(orderBy, reset, nameFilter, privateEvents, state) {
   let apiSkip, mainnetSkip, xdaiSkip, page
   if (reset) {
     page = 0
@@ -201,36 +270,26 @@ export async function getIndexPageData(orderBy, reset, privateEvents, state) {
     mainnetSkip = state.events.mainnetSkip
   }
 
-  let events, total
-  if (orderBy.type === OrderOption.tokenCount.val || orderBy.type === OrderOption.transferCount.val) {
-    //TODO: investigate duplicate events being fetched (probably skips' issues)
-    let {_events, mainnetIndex, xdaiIndex, _total} = await getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy)
-    mainnetSkip += mainnetIndex
-    xdaiSkip += xdaiIndex
-    events = _events
-    total = _total
-  } else {
-    const {_events, _total, apiIndex} = await getEventsByApiFirst(apiSkip, orderBy, privateEvents)
-    events = _events
-    total = _total
-    apiSkip += apiIndex
+  let events = [], loopLimit = 10
+  while (events.length < PAGE_LIMIT && loopLimit > 0) {
+    const missingAmount = PAGE_LIMIT - events.length
+    if (orderBy.type === OrderOption.tokenCount.val || orderBy.type === OrderOption.transferCount.val) {
+      //TODO(sebas): investigate duplicate events being fetched (probably skips' issues)
+      let {_events, mainnetIndex, xdaiIndex} = await getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy, missingAmount)
+      mainnetSkip += mainnetIndex
+      xdaiSkip += xdaiIndex
+      events = _events
+      console.log({mainnetSkip, xdaiSkip, events})
+    } else {
+      const {_events, apiIndex} = await getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, missingAmount)
+      apiSkip += apiIndex
+      events = _events
+      console.log({apiSkip, events})
+    }
   }
 
   return {
-    poapEvents: events.sort((e1, e2) => {
-      let comp1, comp2
-      switch (orderBy.type) {
-        case OrderOption.date.val:
-          comp1 = new Date(e1[orderBy.type])
-          comp2 = new Date(e2[orderBy.type])
-          break
-        default:
-          comp1 = e1[orderBy.type]
-          comp2 = e2[orderBy.type]
-      }
-      return (comp1 > comp2 ? 1 : -1) * (orderBy.order === OrderDirection.ascending ? 1 : -1)
-    }),
-    total: total,
+    poapEvents: events,
     apiSkip: apiSkip,
     mainnetSkip: mainnetSkip,
     xdaiSkip: xdaiSkip,
@@ -240,8 +299,11 @@ export async function getIndexPageData(orderBy, reset, privateEvents, state) {
 
 export async function getActivityPageData() {
 
-  // const {mostRecent, mostClaimed, upcoming} = getTop3Events() //TODO: this need a custom server call (right now it's making a top 3 of a limited number of events)
-  let mostRecent, mostClaimed, upcoming
+  const {upcoming, mostRecent, mostClaimed} = getTop3Events()
+
+  if (mostRecent) mostRecent.heading = "Most Recent"
+  if (upcoming) upcoming.heading = "Upcoming Event"
+  if (mostClaimed) mostClaimed.heading = "Most Claimed Token"
 
   return {
     mostRecent: mostRecent,

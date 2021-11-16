@@ -18,6 +18,13 @@ import {faSearch} from "@fortawesome/free-solid-svg-icons/faSearch";
 import {useWindowWidth} from "@react-hook/window-size";
 import {OrderOption, OrderDirection} from "../store/api";
 
+const SEARCH_STATUS = {
+  NoSearch: 'NoSearch',
+  Searching: 'Searching',
+  Success: 'Success',
+  Failed: 'Failed',
+}
+
 export default function Gallery() {
   const dispatch = useDispatch()
 
@@ -26,56 +33,75 @@ export default function Gallery() {
   const eventError = useSelector(selectEventError)
 
   const [items, setItems] = useState(events)
-  const [search, setSearch] = useState(undefined);
+  const [searchStatus, setSearchStatus] = useState(SEARCH_STATUS.NoSearch);
+  const [searchResultAmount, setSearchResultAmount] = useState(0);
+  const [searchValue, setSearchValue] = useState('');
   const [page, setPage] = useState(0);
+  const [moreToLoad, setMoreToLoad] = useState(true)
 
   const initialOrderType = OrderOption.id
   const initialOrderDirection = OrderDirection.descending
-  const [orderType, setOrderType] = useState(initialOrderType);
-  const [orderDirection, setOrderDirection] = useState(initialOrderDirection);
-  const fetchData = ({reset = false}) => {
-    dispatch(fetchIndexData({orderBy: {type: orderType.val, order: orderDirection.val}, privateEvents: false, reset: reset}))
+  const [orderType, setOrderType] = useState(initialOrderType)
+  const [orderDirection, setOrderDirection] = useState(initialOrderDirection)
+  const [orderResetSignal, setOrderResetSignal] = useState(0)
+  const fetchData = ({reset = false, nameFilter = undefined}) => {
+    if (nameFilter) {
+      // On search, force ordering by initial ordering
+      setOrderType(initialOrderType)
+      setOrderDirection(initialOrderDirection)
+      setOrderResetSignal(orderResetSignal + 1)
+      dispatch(fetchIndexData({orderBy: {type: initialOrderType.val, order: initialOrderDirection.val}, nameFilter: nameFilter, privateEvents: false, reset: reset}))
+    } else {
+      dispatch(fetchIndexData({orderBy: {type: orderType.val, order: orderDirection.val}, nameFilter: nameFilter, privateEvents: false, reset: reset}))
+    }
   }
 
   // Meanwhile reset state and get all the events
   useEffect(() => {
-    fetchData({reset: true})
+    if (searchValue.length <= 2) fetchData({reset: true})
   }, [orderType, orderDirection]); /* eslint-disable-line react-hooks/exhaustive-deps */
   useEffect(() => {
     // Load more data
-    if (page > 0) fetchData({})
+    if (page > 0) fetchData({nameFilter: searchValue})
   }, [page]); /* eslint-disable-line react-hooks/exhaustive-deps */
-
-  const [searchValue, setSearchValue] = useState('');
 
   const width = useWindowWidth();
 
   useEffect(() => {
+    if (searchStatus === SEARCH_STATUS.Searching) {
+      setSearchStatus(events.length ? SEARCH_STATUS.Success : SEARCH_STATUS.Failed)
+      setSearchResultAmount(events.length);
+    }
+    if (page > 0 && events.length === items.length) {
+      setMoreToLoad(false)
+    } else {
+      setMoreToLoad(true)
+    }
     setItems(events)
-  }, [events])
+  }, [events]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
-  const debounceHandleSearch = useCallback(debounce((nextValue, items) => handleNewSearchValue(nextValue, items), 800), [])
+  const debounceHandleSearch = useCallback(debounce((nextValue) => handleNewSearchValue(nextValue), 800), [])
   const handleSearch = (event) => {
     const value = event.target.value
     setSearchValue(value);
-    debounceHandleSearch(value, items)
+    debounceHandleSearch(value)
   };
-  const handleNewSearchValue = (value, items) => {
+  const handleNewSearchValue = (value) => {
     if (value && value.length > 2) {
-      //TODO: change this with dispatch for new data
-      const filteredItems = items.filter((item) => {
-        return item.name.toLowerCase().indexOf(value.toLowerCase()) !== -1;
-      });
-      setSearch(filteredItems);
+      fetchData({reset: true, nameFilter: value})
+      setSearchStatus(SEARCH_STATUS.Searching)
     } else {
-      setSearch(undefined);
+      setSearchStatus(SEARCH_STATUS.NoSearch)
+      setSearchResultAmount(undefined);
     }
   }
 
   const handleOrderDirectionChange = (value) => {
+    setSearchValue('')
     setOrderDirection(value);
   };
   const handleOrderTypeChange = (value) => {
+    setSearchValue('')
     setOrderType(value);
   };
 
@@ -104,13 +130,13 @@ export default function Gallery() {
               <div style={{ display: 'flex', flexDirection: 'row'}}>
                 <input onChange={handleSearch} type="text" value={searchValue} placeholder="Search..." maxLength={20} />{' '}
                 {
-                  searchValue.length
-                      ? <FontAwesomeIcon icon={faTimesCircle} style={{ position: 'relative', fontSize: '1.5rem', right: 37, top: 8, cursor: 'pointer', color: '#C4CAE8' }} onClick={eraseSearch} />
-                      : <FontAwesomeIcon icon={faSearch}      style={{ position: 'relative', fontSize: '1rem', right: 27, top: 11, color: '#C4CAE8' }}/>
+                  searchStatus === SEARCH_STATUS.NoSearch
+                      ? <FontAwesomeIcon icon={faSearch}      style={{ position: 'relative', fontSize: '1rem', right: 27, top: 11, color: '#C4CAE8' }}/>
+                      : <FontAwesomeIcon icon={faTimesCircle} style={{ position: 'relative', fontSize: '1.5rem', right: 37, top: 8, cursor: 'pointer', color: '#C4CAE8' }} onClick={eraseSearch} />
                 }
               </div>
               {
-                search && search.length ?
+                searchStatus === SEARCH_STATUS.Success || searchStatus === SEARCH_STATUS.Failed ?
                 <span
                   style={{
                     position: 'absolute',
@@ -120,7 +146,7 @@ export default function Gallery() {
                     fontSize: '1rem',
                   }}
                 >
-                  {search.length} result(s)
+                  {searchResultAmount} result(s)
                 </span> : null
               }
             </div>
@@ -170,9 +196,9 @@ export default function Gallery() {
                         role="menu"
                       >
                         <Dropdown
-                            title={initialOrderType.name}
-                            defaultOption={initialOrderType.name}
+                            defaultOption={initialOrderType}
                             options={Object.values(OrderOption)}
+                            resetSignal={orderResetSignal}
                             onClickOption={(orderType) => handleOrderTypeChange(orderType)} />
                       </div>
                     </div>
@@ -192,9 +218,9 @@ export default function Gallery() {
                         role="menu"
                       >
                         <Dropdown
-                            title={initialOrderDirection.name}
-                            defaultOption={initialOrderDirection.name}
+                            defaultOption={initialOrderDirection}
                             options={Object.values(OrderDirection)}
+                            resetSignal={orderResetSignal}
                             onClickOption={(orderDirection) => handleOrderDirectionChange(orderDirection)} />
                       </div>
                     </div>
@@ -211,18 +237,19 @@ export default function Gallery() {
                 <span>Could not load gallery, check your connection and try again</span>
               </div>
             ) : eventStatus === 'succeeded' || eventStatus === 'loadingMore' ? (
-              (search?.length === 0) ? <div className='failed-search'>
+              searchStatus === SEARCH_STATUS.Failed ? <div className='failed-search'>
                 <img src={FailedSearch} alt='Failed search'/>
                 <h3>No results for that search :(</h3>
               </div> :
-              <Cards events={items} length={items.length} />
+              <Cards events={items} />
             ) : (
               <Loader/>
             )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
         </div>
-          {!search ?
+          {
+            moreToLoad &&
             <button  className='btn' onClick={() => {
               if (items && items.length) {
                 setPage(page + 1);
@@ -242,7 +269,7 @@ export default function Gallery() {
                 boxShadow: '0 6px 18px 0 #6534FF4D'
               }}>
               Load more
-            </button> : null
+            </button>
           }
         </div>
       </div>
@@ -250,14 +277,6 @@ export default function Gallery() {
   );
 }
 
-function Cards({ events, length }) {
-  let cards = [];
-  if (events && events.length) {
-    let len = (length <= events.length) ? length : events.length;
-    for (let i = 0; i < len; i++) {
-      const event = events[i]
-      cards.push(<EventCard key={event.id} event={event} />)
-    }
-  }
-  return cards;
+function Cards({ events }) {
+  return events && events.length && events.map((event, idx) => <EventCard key={`${event.id}-${idx}`} event={event} />)
 }

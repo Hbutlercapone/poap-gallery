@@ -6,13 +6,11 @@ import {Helmet} from 'react-helmet'
 import {useDispatch, useSelector} from 'react-redux';
 import {
   fetchActivityPageData,
-  fetchIndexData,
   selectMostClaimed,
   selectMostRecent,
-  selectRecentEvents,
   selectUpcoming
 } from '../store';
-import {getMainnetTransfers, getxDaiTransfers, POAP_API_URL} from "../store/api";
+import {getMainnetTransfers, getPaginatedEvents, getxDaiTransfers, POAP_API_URL} from "../store/api";
 import {EventCard} from "../components/eventCard";
 import { Pill } from '../components/pill';
 import Migration from '../assets/images/migrate.svg'
@@ -20,7 +18,14 @@ import Burn from '../assets/images/burn.svg'
 import Claim from '../assets/images/claim.svg'
 import Transfer from '../assets/images/transfer.svg'
 import { Foliage } from '../components/foliage';
-import {dateCell, shrinkAddress, transferType, utcDateFormatted, utcDateFromNow} from '../utilities/utilities';
+import {
+  dateCell,
+  onlyUnique,
+  shrinkAddress,
+  transferType,
+  utcDateFormatted,
+  utcDateFromNow
+} from '../utilities/utilities';
 import { useWindowWidth } from '@react-hook/window-size/throttled';
 import { Link } from 'react-router-dom'
 
@@ -29,7 +34,7 @@ export default function Activity() {
 
   // Meanwhile get all the events
   useEffect(() => {
-    dispatch(fetchActivityPageData({}))
+    dispatch(fetchActivityPageData())
   }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   const [loading, setLoading] = useState(false)
@@ -40,15 +45,8 @@ export default function Activity() {
   const mostClaimed = useSelector(selectMostClaimed)
   const mostRecent = useSelector(selectMostRecent)
   const upcoming = useSelector(selectUpcoming)
-  const recentEvents = useSelector(selectRecentEvents)
-  const [privateEvents, setPrivateEvents] = useState(undefined)
   const transferLimit = 15
 
-  useEffect(()=>{
-    if (recentEvents) {
-      setPrivateEvents(recentEvents.filter(e => e.private_event))
-    }
-  },[recentEvents])
   useEffect(() => {
       setLoading(true)
       getMainnetTransfers(transferLimit)
@@ -84,29 +82,26 @@ export default function Activity() {
   }, []);
 
   useEffect(() => {
-    let _transfers = daitransfers.concat(mainnetTransfers)
-      // Filter ongoing private events
-      .filter(t => {
-        // Check if transfer belongs to a private event
-        // TODO: with the pagination changes this check must be done with the server now
-        const privateEvent = privateEvents.find(e => e.id === t.token.event.id)
-        if (privateEvent === undefined) return true;
-
-        // If it does, check if it is an ongoing private event
-        let evEndDate = new Date(privateEvent.end_date.replace(/-/g, ' ')).getTime()
-        let now = new Date().getTime()
-
-        // Show any transfers from finished private events
-        return evEndDate <= now;
-      })
-      // Sort from newer to older
-      .sort((a, b) => {
-        return b.timestamp - a.timestamp
-      })
-      // Only show a few
-      .slice(0, transferLimit)
-    setTransfers(_transfers)
-  }, [daitransfers, mainnetTransfers, privateEvents])
+    const setNewTransfers = async () => {
+      let transfersEventIds = daitransfers.map(t => t.token.event.id).concat(mainnetTransfers.map(t => t.token.event.id))
+      transfersEventIds = transfersEventIds.filter(onlyUnique)
+      const {items: publicEvents} = await getPaginatedEvents({event_ids: transfersEventIds, privateEvents: false})
+      let _transfers = daitransfers.concat(mainnetTransfers)
+          // Filter out private events
+          .filter(t => {
+            const publicEvent = publicEvents.find(e => e.id === parseInt(t.token.event.id))
+            return publicEvent !== undefined
+          })
+          // Sort from newer to older
+          .sort((a, b) => {
+            return b.timestamp - a.timestamp
+          })
+          // Only show a few
+          .slice(0, transferLimit)
+      setTransfers(_transfers)
+    }
+    setNewTransfers().then()
+  }, [daitransfers, mainnetTransfers])
 
   return (
     <main id="site-main" role="main" className="app-content activity-main">
