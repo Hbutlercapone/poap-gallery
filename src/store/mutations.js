@@ -167,8 +167,10 @@ function limitSubgraphEvents(events, limit) {
   let _mainnetIndex, _xdaiIndex, lastUsedIdx
   for (let i = 0; i < events.length; i++) {
     const e = events[i]
+    const isAValidApiEvent = e.start_date !== undefined
+    const hasTokens = e.tokenCount > 0
     // Use start_date as a way to figure out if it was a valid event in the api fetch
-    if (e.start_date) {
+    if (isAValidApiEvent && hasTokens) {
       if (limitedEvents.length < limit) {
         limitedEvents.push(e)
       } else if (limitedEvents.length === limit) {

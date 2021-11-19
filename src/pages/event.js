@@ -85,6 +85,7 @@ export function Event() {
   useEffect(() => {
     // Call next batch of tokens (if there is more), then load the new tokens data
     const totalPages = Math.ceil(event.tokenCount / GRAPH_LIMIT);
+    let ownerIds = tokens.map(t => t.owner.id)
     if (event && tokens && tokens.length > 0 && pageIndex < totalPages) {
       if (pageIndex + 1 === totalPages) {
         setCanDownloadCsv(CanDownloadCsvStatus.OnLastStep)
