@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import Arrow from '../assets/images/angle_down.svg';
 
-export default function Dropdown({options, resetSignal, defaultOption, onClickOption}) {
+export default function Dropdown({options, disable, defaultOption, onClickOption}) {
   
   const [_title, setTitle] = useState(defaultOption.name)
   const [displayMenu, setDisplayMenu] = useState(false)
@@ -10,22 +10,29 @@ export default function Dropdown({options, resetSignal, defaultOption, onClickOp
     setDisplayMenu(!displayMenu)
   }
 
+  const setValue = (option) => {
+    setTitle(option.name)
+    onClickOption(option)
+  }
+
   const reset = () => {
-    setTitle(defaultOption.name)
+    setValue(defaultOption)
   }
 
   useEffect(() => {
-    reset()
-  }, [resetSignal]) /* eslint-disable-line react-hooks/exhaustive-deps */
+    if(disable) {
+      setDisplayMenu(false)
+      reset()
+    }
+  }, [disable]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
   let optionsElements = []
   for(let i = 0; i < options.length; i++) {
     const option = options[i]
     optionsElements.push(
       <div key={option.name} className={`option`} onClick={() => {
-        setTitle(option.name)
+        setValue(option)
         toggleDisplayMenu()
-        onClickOption(option)
       }}>{option.name}</div>
     )
   }

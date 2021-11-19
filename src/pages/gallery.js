@@ -16,7 +16,7 @@ import FailedSearch from '../assets/images/failed-search.svg'
 import Dropdown from '../components/dropdown';
 import {faSearch} from "@fortawesome/free-solid-svg-icons/faSearch";
 import {useWindowWidth} from "@react-hook/window-size";
-import {OrderOption, OrderDirection} from "../store/api";
+import {OrderType, OrderDirection} from "../store/api";
 
 const SEARCH_STATUS = {
   NoSearch: 'NoSearch',
@@ -39,17 +39,14 @@ export default function Gallery() {
   const [page, setPage] = useState(0);
   const [moreToLoad, setMoreToLoad] = useState(true)
 
-  const initialOrderType = OrderOption.id
+  const initialOrderType = OrderType.date
   const initialOrderDirection = OrderDirection.descending
   const [orderType, setOrderType] = useState(initialOrderType)
   const [orderDirection, setOrderDirection] = useState(initialOrderDirection)
-  const [orderResetSignal, setOrderResetSignal] = useState(0)
+
   const fetchData = ({reset = false, nameFilter = undefined}) => {
-    if (nameFilter) {
+    if (nameFilter?.length) {
       // On search, force ordering by initial ordering
-      setOrderType(initialOrderType)
-      setOrderDirection(initialOrderDirection)
-      setOrderResetSignal(orderResetSignal + 1)
       dispatch(fetchIndexData({orderBy: {type: initialOrderType.val, order: initialOrderDirection.val}, nameFilter: nameFilter, privateEvents: false, reset: reset}))
     } else {
       dispatch(fetchIndexData({orderBy: {type: orderType.val, order: orderDirection.val}, nameFilter: nameFilter, privateEvents: false, reset: reset}))
@@ -58,7 +55,9 @@ export default function Gallery() {
 
   // Meanwhile reset state and get all the events
   useEffect(() => {
-    if (searchValue.length <= 2) fetchData({reset: true})
+    if (searchStatus !== SEARCH_STATUS.Searching) {
+      eraseSearch()
+    }
   }, [orderType, orderDirection]); /* eslint-disable-line react-hooks/exhaustive-deps */
   useEffect(() => {
     // Load more data
@@ -80,34 +79,35 @@ export default function Gallery() {
     setItems(events)
   }, [events]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
+  const eraseSearch = () => {
+    setSearchValue('');
+    setSearchStatus(SEARCH_STATUS.NoSearch)
+    handleNewSearchValue('')
+  }
+
   const debounceHandleSearch = useCallback(debounce((nextValue) => handleNewSearchValue(nextValue), 800), [])
-  const handleSearch = (event) => {
+  const handleSearchInput = (event) => {
     const value = event.target.value
-    setSearchValue(value);
     debounceHandleSearch(value)
-  };
-  const handleNewSearchValue = (value) => {
-    if (value && value.length > 2) {
-      fetchData({reset: true, nameFilter: value})
-      setSearchStatus(SEARCH_STATUS.Searching)
-    } else {
+    setSearchValue(value);
+    if (value?.length <= 2) {
       setSearchStatus(SEARCH_STATUS.NoSearch)
       setSearchResultAmount(undefined);
     }
   }
-
+  const handleNewSearchValue = (value) => {
+    if (value && value.length > 2) {
+      setSearchStatus(SEARCH_STATUS.Searching)
+      fetchData({reset: true, nameFilter: value})
+    } else if (value === '') {
+      fetchData({reset: true})
+    }
+  }
   const handleOrderDirectionChange = (value) => {
-    setSearchValue('')
     setOrderDirection(value);
-  };
+  }
   const handleOrderTypeChange = (value) => {
-    setSearchValue('')
     setOrderType(value);
-  };
-
-  const eraseSearch = () => {
-    setSearchValue('');
-    debounceHandleSearch('', items)
   }
 
   return (
@@ -128,7 +128,7 @@ export default function Gallery() {
           <div className="gallery-grid">
             <div className="gallery-search">
               <div style={{ display: 'flex', flexDirection: 'row'}}>
-                <input onChange={handleSearch} type="text" value={searchValue} placeholder="Search..." maxLength={20} />{' '}
+                <input onChange={handleSearchInput} type="text" value={searchValue} placeholder="Search..." maxLength={20} />{' '}
                 {
                   searchStatus === SEARCH_STATUS.NoSearch
                       ? <FontAwesomeIcon icon={faSearch}      style={{ position: 'relative', fontSize: '1rem', right: 27, top: 11, color: '#C4CAE8' }}/>
@@ -197,8 +197,8 @@ export default function Gallery() {
                       >
                         <Dropdown
                             defaultOption={initialOrderType}
-                            options={Object.values(OrderOption)}
-                            resetSignal={orderResetSignal}
+                            options={Object.values(OrderType)}
+                            disable={searchStatus !== SEARCH_STATUS.NoSearch}
                             onClickOption={(orderType) => handleOrderTypeChange(orderType)} />
                       </div>
                     </div>
@@ -220,7 +220,7 @@ export default function Gallery() {
                         <Dropdown
                             defaultOption={initialOrderDirection}
                             options={Object.values(OrderDirection)}
-                            resetSignal={orderResetSignal}
+                            disable={searchStatus !== SEARCH_STATUS.NoSearch}
                             onClickOption={(orderDirection) => handleOrderDirectionChange(orderDirection)} />
                       </div>
                     </div>
@@ -237,11 +237,12 @@ export default function Gallery() {
                 <span>Could not load gallery, check your connection and try again</span>
               </div>
             ) : eventStatus === 'succeeded' || eventStatus === 'loadingMore' ? (
-              searchStatus === SEARCH_STATUS.Failed ? <div className='failed-search'>
-                <img src={FailedSearch} alt='Failed search'/>
-                <h3>No results for that search :(</h3>
-              </div> :
-              <Cards events={items} />
+              searchStatus === SEARCH_STATUS.Failed ?
+                <div className='failed-search'>
+                  <img src={FailedSearch} alt='Failed search'/>
+                  <h3>No results for that search :(</h3>
+                </div> :
+                <Cards events={items} />
             ) : (
               <Loader/>
             )}
@@ -249,7 +250,8 @@ export default function Gallery() {
           <div style={{ display: 'flex', justifyContent: 'center' }}>
         </div>
           {
-            moreToLoad &&
+            moreToLoad && !eventError && (eventStatus === 'succeeded' || eventStatus === 'loadingMore') &&
+            searchStatus !== SEARCH_STATUS.Failed &&
             <button  className='btn' onClick={() => {
               if (items && items.length) {
                 setPage(page + 1);
@@ -266,9 +268,11 @@ export default function Gallery() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 6px 18px 0 #6534FF4D'
-              }}>
-              Load more
+                boxShadow: '0 6px 18px 0 #6534FF4D',
+              }}
+              disabled={eventStatus === 'loadingMore'}
+            >
+                Load more
             </button>
           }
         </div>

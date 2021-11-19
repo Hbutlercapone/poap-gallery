@@ -32,7 +32,7 @@ const eventsSlice = createSlice({
   reducers: {},
   extraReducers: {
     [fetchIndexData.pending]: (state, action) => {
-      const reset = action.meta.arg.reset //TODO(sebas): check if this is good practice
+      const reset = action.meta.arg.reset
       if (reset) {
         state.status = 'loading'
       } else {
@@ -42,8 +42,6 @@ const eventsSlice = createSlice({
     [fetchIndexData.fulfilled]: (state, action) => {
       const { poapEvents, apiSkip, mainnetSkip, xdaiSkip, page } = action.payload
 
-      console.log({page, poapEvents, apiSkip, mainnetSkip, xdaiSkip})
-      console.log([...state.events])
       if (page === 0) {
         state.events = poapEvents
       } else {
@@ -58,7 +56,6 @@ const eventsSlice = createSlice({
         })
       }
       state.page++
-      console.log([...state.events])
 
 
       state.apiSkip = apiSkip

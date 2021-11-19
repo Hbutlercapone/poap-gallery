@@ -5,7 +5,7 @@ import {
   getMainnetTokens, getPaginatedEvents, getTop3Events,
   getxDaiEvents, getxDaiEventsByIds,
   getXDaiOwners,
-  getxDaiTokens, OrderDirection, OrderOption, PAGE_LIMIT
+  getxDaiTokens, OrderDirection, OrderType, PAGE_LIMIT
 } from './api'
 import {ensABI} from './abis';
 import _, {parseInt, uniqBy} from 'lodash'
@@ -86,7 +86,6 @@ function reduceSubgraphEvents(mainnetEvents, xdaiEvents, orderBy) {
       const mainnetNext =
           (mainnetEvent[orderBy.type] < xdaiEvent[orderBy.type] && orderBy.order === OrderDirection.ascending.val) ||
           (mainnetEvent[orderBy.type] > xdaiEvent[orderBy.type] && orderBy.order === OrderDirection.descending.val)
-      console.log(`order: ${orderBy.order}, ${mainnetEvent[orderBy.type]} < ${xdaiEvent[orderBy.type]}: ${mainnetEvent[orderBy.type] < xdaiEvent[orderBy.type]}. ${mainnetNext ? 'mainnet' : 'xdai'} won`)
       if ( mainnetNext ) {
         pushEvent(subgraphEvents, mainnetEvent, 'mainnet')
         mainnetIndex++
@@ -97,9 +96,7 @@ function reduceSubgraphEvents(mainnetEvents, xdaiEvents, orderBy) {
     }
   }
   return {
-    subgraphEvents,
-    mainnetIndex,
-    xdaiIndex
+    subgraphEvents
   }
 }
 
@@ -137,18 +134,18 @@ function limitApiEvents(events, limit) {
 
   const limitedEvents = []
   let _apiIndex
-  events.forEach((e, idx) => {
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]
     if (e.tokenCount && e.transferCount) {
-      // TODO(sebas): test conditions and returned index
       if (limitedEvents.length < limit) {
         limitedEvents.push(e)
       } else if (limitedEvents.length === limit) {
-        _apiIndex = idx - 1
+        _apiIndex = i
+        break
       }
     }
-  })
+  }
   if (_apiIndex === undefined) {
-    // TODO(sebas): test conditions and returned index
     _apiIndex = events.length - 1
   }
   return {
@@ -168,26 +165,27 @@ function limitSubgraphEvents(events, limit) {
 
   const limitedEvents = []
   let _mainnetIndex, _xdaiIndex, lastUsedIdx
-  events.forEach((e, idx) => {
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]
     // Use start_date as a way to figure out if it was a valid event in the api fetch
     if (e.start_date) {
-      // TODO(sebas): test conditions and returned index
       if (limitedEvents.length < limit) {
         limitedEvents.push(e)
       } else if (limitedEvents.length === limit) {
-        lastUsedIdx = idx
+        lastUsedIdx = i
+        break
       }
     }
-  })
+  }
 
   // Look for indexes
-  for (let i = events.length-1; i >= 0; i--) {
+  for (let i = lastUsedIdx; i >= 0; i--) {
     const event = events[i]
     if (_mainnetIndex && _xdaiIndex) break
-    if (event.chainId.includes('xdai')) {
+    if (_xdaiIndex === undefined && event.chainId.includes('xdai')) {
       _xdaiIndex = i
     }
-    if (event.chainId.includes('mainnet')) {
+    if (_mainnetIndex === undefined && event.chainId.includes('mainnet')) {
       _mainnetIndex = i
     }
   }
@@ -201,26 +199,31 @@ function limitSubgraphEvents(events, limit) {
 
 async function getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy, missingAmount) {
   let batchSize = PAGE_LIMIT*5
+  //TODO:test events passing without tokenCount
   let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEvents(batchSize, mainnetSkip, orderBy), getxDaiEvents(batchSize, xdaiSkip, orderBy)])
-  let {subgraphEvents, mainnetIndex, xdaiIndex} = reduceSubgraphEvents(mainnetEvents, xdaiEvents, orderBy)
+  let {subgraphEvents} = reduceSubgraphEvents(mainnetEvents, xdaiEvents, orderBy)
 
-  const event_ids = subgraphEvents.map(e => e.id).join(',')
-  const {items: events} = await getPaginatedEvents({event_ids, limit: event_ids.length})
+  const eventIds = subgraphEvents.map(e => e.id)
+  let events = []
+  for (let i = 0; i < eventIds.length; i+=1000) {
+    const eventIdsSlice = eventIds.slice(i, Math.min(i+1000, eventIds.length))
+    const {items} = await getPaginatedEvents({event_ids: eventIdsSlice.join(','), limit: eventIdsSlice.length})
+    events = events.concat(items)
+  }
+  //TODO(sebas): agg and limit can be done per batch, potentially saving calls
   aggregateSubgraphEventsData(events, subgraphEvents)
   let {limitedEvents, _mainnetIndex, _xdaiIndex} = limitSubgraphEvents(subgraphEvents, missingAmount)
   if (_mainnetIndex === undefined) {
-    // TODO(sebas): test conditions and returned index
     _mainnetIndex = batchSize
   }
   if (_xdaiIndex === undefined) {
-    // TODO(sebas): test conditions and returned index
     _xdaiIndex = batchSize
   }
 
   return {
     _events: limitedEvents,
-    mainnetIndex: mainnetIndex,
-    xdaiIndex: xdaiIndex,
+    mainnetIndex: _mainnetIndex,
+    xdaiIndex: _xdaiIndex
   }
 }
 
@@ -238,21 +241,21 @@ async function getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, 
   if (!apiEvents || apiEvents.length === 0) {
     return {
       _events: [],
-      apiIndex: batchSize
+      apiIndex: batchSize,
+      lessThanPageLimit: false
     }
   }
 
-  //TODO(sebas): verify no more than PAGE_LIMIT events are returned (ex: try putting 3 as batchSize and check if it returns 20 or something like 21)
   const event_ids = apiEvents.map(e => e.id)
-
   let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEventsByIds(event_ids), getxDaiEventsByIds(event_ids)])
   const subgraphEvents = _.concat(mainnetEvents.data.events, xdaiEvents.data.events)
   normalizeSubgraphEvents(subgraphEvents)
   aggregateEventsData(apiEvents, subgraphEvents)
-  const {limitedEvents, _apiIndex} = limitApiEvents(apiEvents, missingAmount)
+  const {limitedEvents, _apiIndex} = limitApiEvents(apiEvents, Math.min(missingAmount, paginatedResults.total))
   return {
     _events: limitedEvents,
-    apiIndex: _apiIndex
+    apiIndex: _apiIndex,
+    lessThanPageLimit: paginatedResults.total < PAGE_LIMIT
   }
 }
 
@@ -273,19 +276,20 @@ export async function getIndexPageData(orderBy, reset, nameFilter, privateEvents
   let events = [], loopLimit = 10
   while (events.length < PAGE_LIMIT && loopLimit > 0) {
     const missingAmount = PAGE_LIMIT - events.length
-    if (orderBy.type === OrderOption.tokenCount.val || orderBy.type === OrderOption.transferCount.val) {
-      //TODO(sebas): investigate duplicate events being fetched (probably skips' issues)
+    if (orderBy.type === OrderType.id.val || orderBy.type === OrderType.date.val || orderBy.type === OrderType.city.val) {
+      const {_events, apiIndex, lessThanPageLimit} = await getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, missingAmount)
+      apiSkip += apiIndex
+      events = events.concat(_events)
+      if (lessThanPageLimit) {
+        loopLimit = 0 // break out
+      }
+    } else {
       let {_events, mainnetIndex, xdaiIndex} = await getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy, missingAmount)
       mainnetSkip += mainnetIndex
       xdaiSkip += xdaiIndex
-      events = _events
-      console.log({mainnetSkip, xdaiSkip, events})
-    } else {
-      const {_events, apiIndex} = await getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, missingAmount)
-      apiSkip += apiIndex
-      events = _events
-      console.log({apiSkip, events})
+      events = events.concat(_events)
     }
+    loopLimit--
   }
 
   return {
