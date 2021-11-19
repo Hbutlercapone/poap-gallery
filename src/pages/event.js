@@ -52,6 +52,7 @@ export function Event() {
 
   const [pageIndex, setPageIndex] = useState(0);
   const [data, setData] = useState([]);
+  const [mobileData, setMobileData] = useState([]);
   const [csv_data, setCsv_data] = useState([]);
   const [ensNames, setEnsNames] = useState([]);
   const [canDownloadCsv, setCanDownloadCsv] = useState(CanDownloadCsvStatus.NotReady);
@@ -63,10 +64,11 @@ export function Event() {
     window.scrollTo(0, 0)
   }, [])
   
-  const MobileRow = ({token}) => (
+  const MobileRow = ({token, address}) => (
     <div className={`mobile-row open`}>
       <span className='id-title'>POAP ID</span><span className='id-content'>#{token.id}</span>
-      <span className='address-title'>Address</span><span className='address-content ellipsis'>{shrinkAddress(token.owner.id, 15)}</span>
+      <span className='address-title'>Address</span><span className='address-content ellipsis'>
+        <a href={"https://app.poap.xyz/scan/" + token.owner.id} target="_blank" rel="noopener noreferrer">{shrinkAddress(address, 15)}</a></span>
       <span className='claim-title'>Claim Date</span><span className='claim-content'>{utcDateFormatted(token.created * 1000)}</span>
       <span className='tr-count-title'>Transaction Count</span><span className='tr-count-content'>{token.transferCount}</span>
       <span className='power-title'>Power</span><span className='power-content'>{token.owner.tokensOwned}</span>
@@ -90,45 +92,56 @@ export function Event() {
       setPageIndex(pageIndex + 1);
     }
 
-    let _data = []
+    let _data = [], _mobileData = []
     let _csv_data = []
     _csv_data.push(['ID', 'Collection', 'ENS', 'Minting Date', 'Tx Count', 'Power']);
-    for (let i = tokens.length-1; i >= 0; i--) {
-      _data.push(width > 480 ? {
+    for (let i = 0; i < tokens.length; i++) {
+      _data.push({
         col1:  (<ExternalLinkCell url={"https://app.poap.xyz/token/" + tokens[i].id} content={`#${tokens[i].id}`}/>) ,
-        col2: (<ExternalLinkCell url={"https://app.poap.xyz/scan/" + tokens[i].owner.id} tooltipText='View Collection in POAP.scan' content={width > 768
-            ? <span>{shrinkAddress(tokens[i].owner.id, 20)}</span>
-            : <span>{shrinkAddress(tokens[i].owner.id, 10)}</span>
-        }/>),
+        col2: (<ExternalLinkCell url={"https://app.poap.xyz/scan/" + tokens[i].owner.id} tooltipText='View Collection in POAP.scan' content={tokens[i].owner.id}/>),
         col3: tokens[i].created * 1000,
         col4: tokens[i].transferCount,
         col5: tokens[i].owner.tokensOwned,
-      } : {
-        col1:
-          <MobileRow token={tokens[i]} />
+      })
+      _mobileData.push({
+        col1: <MobileRow token={tokens[i]} address={tokens[i].owner.id} />
       })
       _csv_data.push([tokens[i].id, tokens[i].owner.id, null, utcDateFull(tokens[i].created * 1000), tokens[i].transferCount, tokens[i].owner.tokensOwned])
     }
     setData(_data)
+    setMobileData(_mobileData)
     setCsv_data(_csv_data)
-  }, [event, tokens, pageIndex, setPageIndex, width]);
+    getEnsData(ownerIds).then(allnames => {
+      if(allnames.length > 0){
+        setEnsNames(allnames)
+      }
+    })
+  }, [event, tokens, pageIndex, setPageIndex]); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   useEffect(() => {
     // Merge ens data
     if(ensNames.length > 0){
       // TODO: probably there is a better way to merge
-      let _data = _.cloneDeep(data);
+      let _data = _.cloneDeep(width > 480 ? data : mobileData);
       let _csv_data = _.cloneDeep(csv_data);
       for (let i = 0; i < tokens.length; i++) {
         let validName = ensNames[i]
         if (validName) {
           if (data[i]) {
-            _data[i].col2 = (<a href={"https://app.poap.xyz/scan/" + tokens[i].owner.id} target="_blank"  rel="noopener noreferrer" data-tip='View Collection in POAP.scan'> <ReactTooltip effect='solid' /> {validName}</a>)
+            if (width > 480) {
+              _data[i].col2 = (<a href={"https://app.poap.xyz/scan/" + tokens[i].owner.id} target="_blank"  rel="noopener noreferrer" data-tip='View Collection in POAP.scan'> <ReactTooltip effect='solid' /> {validName}</a>)
+            } else {
+              _data[i].col1 = <MobileRow token={tokens[i]} address={validName} />
+            }
             _csv_data[i+1][2] = validName // i+1 is there to compensate for the first array which is just the csv titles
           }
         }
       }
-      setData(_data)
+      if (width > 480) {
+        setData(_data)
+      } else {
+        setMobileData(_data)
+      }
       setCsv_data(_csv_data)
     }
   }, [ensNames]) /* eslint-disable-line react-hooks/exhaustive-deps */
@@ -289,7 +302,7 @@ export function Event() {
           {
             width > 480
             ? <CreateTable event={event} loading={loadingEvent !== 'succeeded'} columns={columns} data={data} pageCount={pageCount} />
-            : <CreateMobileTable event={event} loading={loadingEvent !== 'succeeded'} columns={mobileColumns} data={data} pageCount={pageCount} />
+            : <CreateMobileTable event={event} loading={loadingEvent !== 'succeeded'} columns={mobileColumns} data={mobileData} pageCount={pageCount} />
           }
         </div>
       </div>
@@ -300,6 +313,7 @@ export function Event() {
 function ExternalLinkCell({url, tooltipText = null, content}) {
   const [isHovering, setIsHovering] = useState(false)
   const [isHoveringLink, setIsHoveringLink] = useState(false)
+  const width = useWindowWidth()
   let hoverDeactivateTimeout = null;
   let hoverLinkDeactivateTimeout = null;
   useEffect(()=>{
@@ -319,7 +333,7 @@ function ExternalLinkCell({url, tooltipText = null, content}) {
        }, 500)}}
        style={{position: 'relative', width: 27}}
     >
-      <span>{content}</span><ReactTooltip id='mainTooltip' effect='solid'/>
+      <span>{shrinkAddress(content, width > 768 ? 20 : 10)}</span><ReactTooltip id='mainTooltip' effect='solid'/>
        {
          isHovering &&
          <><div className='external-link'
