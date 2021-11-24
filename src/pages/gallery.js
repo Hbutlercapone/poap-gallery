@@ -4,7 +4,6 @@ import {Helmet} from 'react-helmet';
 import {
   FETCH_INDEX_PAGE_INFO_STATUS,
   fetchIndexData,
-  selectIndexFetchError,
   selectIndexFetchStatus,
   selectRecentEvents
 } from '../store';

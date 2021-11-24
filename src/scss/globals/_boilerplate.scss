@@ -253,3 +253,11 @@ ol {
   }
   box-shadow: none!important;
 }
+
+.token-not-found {
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  margin: 0 auto;
+  text-align: center;
+}
