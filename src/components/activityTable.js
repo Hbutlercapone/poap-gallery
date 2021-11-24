@@ -1,7 +1,5 @@
 import React, {useState, useEffect} from 'react'
 import {Link} from 'react-router-dom'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
 import {getMainnetTransfers, getxDaiTransfers, POAP_API_URL} from "../store/api";
 import { Pill } from './pill';
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome';
@@ -11,11 +9,8 @@ import ClaimIcon from '../assets/images/claim-icon.svg'
 import MigrateIcon from '../assets/images/migrate-icon.svg'
 import BurnIcon from '../assets/images/burn-icon.svg'
 import { useWindowWidth } from '@react-hook/window-size/throttled';
-import { transferType } from '../utilities/utilities'
-
-
-dayjs.extend(relativeTime)
-
+import {transferType, utcDateFromNow} from '../utilities/utilities'
+import { LazyImage } from './LazyImage';
 
 export default function ActivityTable() {
 
@@ -100,10 +95,12 @@ function Transfer({transfer}) {
       <div style={{display: 'flex', justifyContent: 'center', width: '100%'}}>
         <a href={"https://app.poap.xyz/token/" + transfer.token.id} target="_blank" style={{margin: '.8rem 0', opacity: transfer.opacity}} className={`round-box ${transfer.opacity===1? 'first':''}`} rel="noopener noreferrer">
           <div className='round-box-image'>
-            <img style={{
-              objectFit: 'cover',
-              borderRadius: '50%'
-            }} src={`${POAP_API_URL}/token/${transfer.token.id}/image`} alt=""/>
+            <LazyImage
+              src={`${POAP_API_URL}/token/${transfer.token.id}/image`}
+              width={50}
+              height={50}
+              containerClasses="circle-container"
+            />
           </div>
           <div className='round-box-content'>
             <Pill text={type} className={type} tooltip={false} />
@@ -132,7 +129,7 @@ function Transfer({transfer}) {
           </div>
           {width > 768 && 
             <div className='round-box-time'>
-              {dayjs(transfer.timestamp * 1000).fromNow()}
+              {utcDateFromNow(transfer.timestamp * 1000)}
             </div>}
         </a>
       </div>

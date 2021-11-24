@@ -14,7 +14,7 @@ import Loader from '../components/loader'
 import _ from 'lodash'
 import { EventCard } from '../components/eventCard';
 import { Foliage } from '../components/foliage';
-import {dateCell, shrinkAddress} from '../utilities/utilities';
+import {dateCell, shrinkAddress, utcDateFormatted, utcDateFull} from '../utilities/utilities';
 import { useWindowWidth } from '@react-hook/window-size/throttled';
 import OpenLink from '../assets/images/openLink.svg'
 import {toast} from "react-hot-toast";
@@ -58,6 +58,7 @@ export function Event() {
 
   const [pageIndex, setPageIndex] = useState(0);
   const [data, setData] = useState([]);
+  const [mobileData, setMobileData] = useState([]);
   const [csv_data, setCsv_data] = useState([]);
   const [ensNames, setEnsNames] = useState([]);
   const [canDownloadCsv, setCanDownloadCsv] = useState(CSV_STATUS.DownloadingData);
@@ -73,11 +74,12 @@ export function Event() {
     window.scrollTo(0, 0)
   }, [])
   
-  const MobileRow = ({token}) => (
+  const MobileRow = ({token, address}) => (
     <div className={`mobile-row open`}>
       <span className='id-title'>POAP ID</span><span className='id-content'>#{token.id}</span>
-      <span className='address-title'>Address</span><span className='address-content ellipsis'>{shrinkAddress(token.owner.id, 15)}</span>
-      <span className='claim-title'>Claim Date</span><span className='claim-content'>{new Date(token.created * 1000).toLocaleDateString()}</span>
+      <span className='address-title'>Address</span><span className='address-content ellipsis'>
+        <a href={"https://app.poap.xyz/scan/" + token.owner.id} target="_blank" rel="noopener noreferrer">{shrinkAddress(address, 15)}</a></span>
+      <span className='claim-title'>Claim Date</span><span className='claim-content'>{utcDateFormatted(token.created * 1000)}</span>
       <span className='tr-count-title'>Transaction Count</span><span className='tr-count-content'>{token.transferCount}</span>
       <span className='power-title'>Power</span><span className='power-content'>{token.owner.tokensOwned}</span>
     </div>
@@ -100,45 +102,46 @@ export function Event() {
       setPageIndex(pageIndex + 1);
     }
 
-    let _data = []
+    let _data = [], _mobileData = []
     let _csv_data = []
     _csv_data.push(['ID', 'Collection', 'ENS', 'Minting Date', 'Tx Count', 'Power']);
     for (let i = 0; i < tokens.length; i++) {
-      _data.push(width > 480 ? {
+      _data.push({
         col1:  (<ExternalLinkCell url={"https://app.poap.xyz/token/" + tokens[i].id} content={`#${tokens[i].id}`}/>) ,
-        col2: (<ExternalLinkCell url={"https://app.poap.xyz/scan/" + tokens[i].owner.id} tooltipText='View Collection in POAP.scan' content={width > 768
-            ? <span>{shrinkAddress(tokens[i].owner.id, 20)}</span>
-            : <span>{shrinkAddress(tokens[i].owner.id, 10)}</span>
-        }/>),
-        col3: new Date(tokens[i].created * 1000).toLocaleDateString(),
+        col2: (<ExternalLinkCell url={"https://app.poap.xyz/scan/" + tokens[i].owner.id} tooltipText='View Collection in POAP.scan' content={tokens[i].owner.id}/>),
+        col3: tokens[i].created * 1000,
         col4: tokens[i].transferCount,
         col5: tokens[i].owner.tokensOwned,
-      } : {
-        col1:
-          <MobileRow token={tokens[i]} />
       })
-      _csv_data.push([tokens[i].id, tokens[i].owner.id, null, new Date(tokens[i].created * 1000).toLocaleDateString(), tokens[i].transferCount, tokens[i].owner.tokensOwned])
+      _mobileData.push({
+        col1: <MobileRow token={tokens[i]} address={tokens[i].owner.id} />
+      })
+      _csv_data.push([tokens[i].id, tokens[i].owner.id, null, utcDateFull(tokens[i].created * 1000), tokens[i].transferCount, tokens[i].owner.tokensOwned])
     }
     setData(_data)
+    setMobileData(_mobileData)
     setCsv_data(_csv_data)
-  }, [event, tokens, pageIndex, setPageIndex, width]);
+  }, [event, tokens, pageIndex, setPageIndex]); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   useEffect(() => {
     // Merge ens data
     if(ensNames.length > 0){
       // TODO: probably there is a better way to merge
       let _data = _.cloneDeep(data);
+      let _mobileData = _.cloneDeep(mobileData);
       let _csv_data = _.cloneDeep(csv_data);
       for (let i = 0; i < tokens.length; i++) {
         let validName = ensNames[i]
         if (validName) {
           if (data[i]) {
             _data[i].col2 = (<a href={"https://app.poap.xyz/scan/" + tokens[i].owner.id} target="_blank"  rel="noopener noreferrer" data-tip='View Collection in POAP.scan'> <ReactTooltip effect='solid' /> {validName}</a>)
+            _mobileData[i].col1 = <MobileRow token={tokens[i]} address={validName} />
             _csv_data[i+1][2] = validName // i+1 is there to compensate for the first array which is just the csv titles
           }
         }
       }
       setData(_data)
+      setMobileData(_mobileData)
       setCsv_data(_csv_data)
     }
   }, [ensNames]) /* eslint-disable-line react-hooks/exhaustive-deps */
@@ -276,7 +279,7 @@ export function Event() {
                 {
                   width > 480
                       ? <CreateTable event={event} loading={loadingEvent !== 'succeeded'} columns={columns} data={data} pageCount={pageCount} />
-                      : <CreateMobileTable event={event} loading={loadingEvent !== 'succeeded'} columns={mobileColumns} data={data} pageCount={pageCount} />
+                      : <CreateMobileTable event={event} loading={loadingEvent !== 'succeeded'} columns={mobileColumns} data={mobileData} pageCount={pageCount} />
                 }
               </div>
             </div>
@@ -288,6 +291,7 @@ export function Event() {
 function ExternalLinkCell({url, tooltipText = null, content}) {
   const [isHovering, setIsHovering] = useState(false)
   const [isHoveringLink, setIsHoveringLink] = useState(false)
+  const width = useWindowWidth()
   let hoverDeactivateTimeout = null;
   let hoverLinkDeactivateTimeout = null;
   useEffect(()=>{
@@ -307,7 +311,7 @@ function ExternalLinkCell({url, tooltipText = null, content}) {
        }, 500)}}
        style={{position: 'relative', width: 27}}
     >
-      <span>{content}</span><ReactTooltip id='mainTooltip' effect='solid'/>
+      <span>{shrinkAddress(content, width > 768 ? 20 : 10)}</span><ReactTooltip id='mainTooltip' effect='solid'/>
        {
          isHovering &&
          <><div className='external-link'
@@ -392,7 +396,7 @@ function CreateTable({loading, pageCount: pc, columns, data, event}) {
                 {row.cells.map((cell, idx) => {
                   return (
                     idx === 2
-                    ? <td key={idx} {...cell.getCellProps()}>{dateCell(cell, dateFormat)}</td>
+                    ? <td key={idx} {...cell.getCellProps()}>{dateCell(cell.value, dateFormat)}</td>
                     : <td key={idx} {...cell.getCellProps()}>{cell.render('Cell')}</td>
                 )})}
               </tr>
@@ -514,46 +518,3 @@ function calculatePower(csv_data) {
   }, 0)
   return power;
 }
-
-// function tokenDetails(event, csv_data, power) {
-//   let array1 = [
-//     { value: event.city, key: 'City' },
-//     { value: event.country, key: 'Country' },
-//     { value: event.start_date, key: 'Start date' },
-//     { value: event.end_date, key: 'End date' },
-//     { value: event.event_url, key: 'Website', render: (value) => {
-//       let host = new URL(value).hostname
-//       return (
-//       <a href={value} className="href" target="_blank" rel="noopener noreferrer">{host}</a>
-//       )
-//     }},
-//   ];
-//   if (Array.isArray(csv_data) && csv_data.length > 1) {
-//     array1.push({ value: csv_data.length - 1, key: 'Supply' });
-//   }
-//   array1.push({ value: power, key: 'Power' });
-//   let array2 = [];
-
-//   for (let i = 0; i < array1.length; i++) {
-//     if(array1[0].value === ''){
-//       array1[0].value = <span> Virtual event  <FontAwesomeIcon icon={faLaptop}></FontAwesomeIcon> </span>
-//     }
-//     if(array1[1].value === array1[2].value){
-//       //array1.shift();
-//       array1[1].value = null;
-//       array1[2] = {value: event.end_date, key: 'Date'}
-//     } //todo: if 1 == 2 , it pushes the the table down
-//     if(array1[i].value){
-//       let e = (
-//         <div key={i} style={{ display: 'flex', padding: '0 1rem'}}>
-//           <h4 style={{ flex: '0 0 7rem'}}> {array1[i].key} </h4>
-//           <div style={{ flex: '1 1 8rem'}}> {array1[i].render ? array1[i].render(array1[i].value) : array1[i].value} </div>
-//         </div>
-//       );
-//       array2.push(e);
-//     }
-//   }
-//   return array2;
-// }
-
-
