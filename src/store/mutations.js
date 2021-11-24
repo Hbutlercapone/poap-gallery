@@ -31,7 +31,6 @@ export async function getEnsData(ownerIds){
       names = await ReverseRecords.getNames(chunk)
     }catch(e){
       // Fallback to null if problem fetching Reverse record
-      console.log(e)
       names = chunk.map(a => null)
     }
     const validNames = names.map(name => {
