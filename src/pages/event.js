@@ -158,7 +158,7 @@ export function Event() {
             <Loader/>
           </div>
         }
-        {(errorEvent || Object.keys(event).length === 0) &&
+        {(errorEvent || Object.keys(event).length === 0) && !isLoadingEvent() && !isIdle() &&
           <div className={'token-not-found'}>
             <h2>{errorEvent || defaultEventErrorMessage}</h2>
             <div>
