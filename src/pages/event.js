@@ -7,7 +7,7 @@ import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {faAngleLeft, faAngleRight, faArrowDown, faArrowUp, faDotCircle, faQuestionCircle} from '@fortawesome/free-solid-svg-icons'
 import {Helmet} from 'react-helmet'
 import {useDispatch, useSelector} from 'react-redux';
-import {fetchEventPageData} from '../store';
+import {FETCH_EVENT_PAGE_INFO_STATUS, fetchEventPageData} from '../store';
 import {CSVLink} from "react-csv";
 import {getEnsData} from '../store/mutations';
 import Loader from '../components/loader'
@@ -147,7 +147,7 @@ export function Event() {
   }, [ensNames]) /* eslint-disable-line react-hooks/exhaustive-deps */
 
   useEffect(() => {
-    if (loadingEvent === 'succeeded' && csvDownloadIsOnLastStep()) {
+    if (loadingEvent === FETCH_EVENT_PAGE_INFO_STATUS.SUCCEEDED && csvDownloadIsOnLastStep()) {
       setCanDownloadCsv(CSV_STATUS.ReadyWithoutEns)
       let ownerIds = tokens.map(t => t.owner.id)
       getEnsData(ownerIds).then(allnames => {
@@ -222,7 +222,7 @@ export function Event() {
         </Helmet>
         <Foliage />
         {
-          loadingEvent === 'loading' || loadingEvent === 'idle' ?
+          loadingEvent === FETCH_EVENT_PAGE_INFO_STATUS.LOADING || loadingEvent === FETCH_EVENT_PAGE_INFO_STATUS.IDLE ?
               <div style={{display: 'flex', justifyContent: 'center'}}>
                 <Loader />
               </div> :
@@ -278,8 +278,8 @@ export function Event() {
               <div className='table-container'>
                 {
                   width > 480
-                      ? <CreateTable event={event} loading={loadingEvent !== 'succeeded'} columns={columns} data={data} pageCount={pageCount} />
-                      : <CreateMobileTable event={event} loading={loadingEvent !== 'succeeded'} columns={mobileColumns} data={mobileData} pageCount={pageCount} />
+                      ? <CreateTable event={event} loading={loadingEvent !== FETCH_EVENT_PAGE_INFO_STATUS.SUCCEEDED} columns={columns} data={data} pageCount={pageCount} />
+                      : <CreateMobileTable event={event} loading={loadingEvent !== FETCH_EVENT_PAGE_INFO_STATUS.SUCCEEDED} columns={mobileColumns} data={mobileData} pageCount={pageCount} />
                 }
               </div>
             </div>

@@ -1,7 +1,13 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import ActivityTable from '../components/activityTable'
 import {Helmet} from 'react-helmet';
-import {fetchIndexData, selectEventError, selectEventStatus, selectRecentEvents} from '../store';
+import {
+  FETCH_INDEX_PAGE_INFO_STATUS,
+  fetchIndexData,
+  selectIndexFetchError,
+  selectIndexFetchStatus,
+  selectRecentEvents
+} from '../store';
 import {useDispatch, useSelector} from 'react-redux';
 import {EventCard} from "../components/eventCard";
 import Loader from '../components/loader'
@@ -22,8 +28,7 @@ export default function Gallery() {
   }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
 
   const events  = useSelector(selectRecentEvents)
-  const eventStatus = useSelector(selectEventStatus)
-  const eventError = useSelector(selectEventError)
+  const indexFetchStatus = useSelector(selectIndexFetchStatus)
 
   const [items, setItems] = useState(events)
   const [search, setSearch] = useState(undefined);
@@ -253,7 +258,7 @@ export default function Gallery() {
                 </div>
               </div>
             </div>
-            {eventError ? (
+            {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.FAILED && (
               <div
                 style={{
                   gridColumn: '1 / 3',
@@ -262,15 +267,15 @@ export default function Gallery() {
                 <span>Could not load gallery, check your connection and try again</span>
               </div>
 
-            ) : eventStatus === 'succeeded' ? (
+            )}
+            {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED && (
               (search?.length === 0) ? <div className='failed-search'>
                 <img src={FailedSearch} alt='Failed search'/>
                 <h3>No results for that search :(</h3>
               </div> :
               <Cards events={(search?.length) ? search : items} length={search?.length || length} />
-            ) : (
-              <Loader/>
             )}
+            {(indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.IDLE || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.IDLE) && <Loader/>}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
         </div>
