@@ -257,16 +257,6 @@ export default function Gallery() {
                 </div>
               </div>
             </div>
-            {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.FAILED && (
-              <div
-                style={{
-                  gridColumn: '1 / 3',
-                }}
-              >
-                <span>Could not load gallery, check your connection and try again</span>
-              </div>
-
-            )}
             {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED && (
               (search?.length === 0) ? <div className='failed-search'>
                 <img src={FailedSearch} alt='Failed search'/>
@@ -278,6 +268,11 @@ export default function Gallery() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
         </div>
+          {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.FAILED && (
+              <div className={'center'}>
+                <span>Could not load gallery, check your connection and try again</span>
+              </div>
+          )}
           {!search ?
             <button  className='btn' onClick={() => {
                 if (items && items.length) {
