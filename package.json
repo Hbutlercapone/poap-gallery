@@ -43,8 +43,7 @@
     "redux-persist": "^6.0.0",
     "redux-thunk": "^2.3.0",
     "request": "^2.88.2",
-    "serverless-http": "^2.7.0",
-    "styled-components": "^5.3.3"
+    "serverless-http": "^2.7.0"
   },
   "scripts": {
     "start": "react-scripts start",
