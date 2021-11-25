@@ -18,7 +18,6 @@ import {dateCell, shrinkAddress, utcDateFormatted, utcDateFull} from '../utiliti
 import { useWindowWidth } from '@react-hook/window-size/throttled';
 import OpenLink from '../assets/images/openLink.svg'
 import {toast} from "react-hot-toast";
-import styled from "styled-components";
 
 const GRAPH_LIMIT = 1000;
 const CSV_STATUS = {
@@ -42,10 +41,6 @@ export default function Events() {
     </Switch>
   );
 }
-
-const CSVLinkText = styled.span`
-  margin: 0;
-`
 
 export function Event() {
   const params = useParams();
@@ -197,7 +192,7 @@ export function Event() {
                     className={'btn csv-button'}
                     data={csv_data}
                 >
-                  <CSVLinkText>{`Download CSV${csvOnlyMissingEns() ? ' (without ens)' : ''}`}</CSVLinkText>
+                  <span className={'no-margin'}>{`Download CSV${csvOnlyMissingEns() ? ' (without ens)' : ''}`}</span>
                   <ReactTooltip effect={'solid'} />
                 </CSVLink> :
                 <button

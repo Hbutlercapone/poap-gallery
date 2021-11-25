@@ -274,7 +274,7 @@ export default function Gallery() {
               </div> :
               <Cards events={(search?.length) ? search : items} length={search?.length || length} />
             )}
-            {(indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.IDLE || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.IDLE) && <Loader/>}
+            {(indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.IDLE || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING) && <Loader/>}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
         </div>
