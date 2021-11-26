@@ -14,6 +14,7 @@ import {Toaster} from "react-hot-toast";
 
 function App() {
 
+  // eslint-disable-next-line
   const intercom = useIntercom({
     app_id: process.env.REACT_APP_INTERCOM_APP_ID || 'syysagea'
   })
