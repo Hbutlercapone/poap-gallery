@@ -306,6 +306,6 @@ export async function validateMigrations(migrations) {
 }
 
 export async function getTop3Events() {
-  const res = await fetch(`${POAP_API_URL}/top-3-events`) //TODO(sebas): test endpoint (when feature merged into prod)
+  const res = await fetch(`${POAP_API_URL}/top-3-events`)
   return res.json()
 }

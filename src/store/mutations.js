@@ -201,7 +201,6 @@ function limitSubgraphEvents(events, limit) {
 
 async function getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy, missingAmount) {
   let batchSize = PAGE_LIMIT*5
-  //TODO:test events passing without tokenCount
   let [mainnetEvents, xdaiEvents] = await Promise.all([getMainnetEvents(batchSize, mainnetSkip, orderBy), getxDaiEvents(batchSize, xdaiSkip, orderBy)])
   let {subgraphEvents} = reduceSubgraphEvents(mainnetEvents, xdaiEvents, orderBy)
 
@@ -212,7 +211,6 @@ async function getEventsBySubgraphFirst(mainnetSkip, xdaiSkip, orderBy, missingA
     const {items} = await getPaginatedEvents({event_ids: eventIdsSlice.join(','), limit: eventIdsSlice.length})
     events = events.concat(items)
   }
-  //TODO(sebas): agg and limit can be done per batch, potentially saving calls
   aggregateSubgraphEventsData(events, subgraphEvents)
   let {limitedEvents, _mainnetIndex, _xdaiIndex} = limitSubgraphEvents(subgraphEvents, missingAmount)
   if (_mainnetIndex === undefined) {
