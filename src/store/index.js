@@ -30,6 +30,7 @@ const initialEventsState = {
   apiSkip: 0,
   mainnetSkip: 0,
   xdaiSkip: 0,
+  totalResults: 0,
   page: 0,
 }
 
@@ -53,7 +54,7 @@ const eventsSlice = createSlice({
       }
     },
     [fetchIndexData.fulfilled]: (state, action) => {
-      const { poapEvents, apiSkip, mainnetSkip, xdaiSkip, page } = action.payload
+      const { poapEvents, apiSkip, mainnetSkip, xdaiSkip, page, total } = action.payload
 
       if (page === 0) {
         state.events = poapEvents
@@ -70,10 +71,10 @@ const eventsSlice = createSlice({
       }
       state.page++
 
-
       state.apiSkip = apiSkip
       state.mainnetSkip = mainnetSkip
       state.xdaiSkip = xdaiSkip
+      state.totalResults = total
       state.status = FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED
     },
     [fetchIndexData.rejected]: (state, action) => {
@@ -120,17 +121,8 @@ const eventsSlice = createSlice({
 
 export const selectIndexFetchStatus = state => state.events.status
 
-export const selectRecentEvents = state => state.events.events.filter(event => {
-  // don't show future events
-  if ((new Date(event.start_date.replace(/-/g, ' ')).getTime() > new Date().getTime() + (24 * 60 * 60 * 1000))) {
-    return false
-  }
-  // don't show events without a claimed token
-  if (event.tokenCount !== undefined && event.tokenCount === 0) {
-    return false
-  }
-  return true
-})
+export const selectEvents = state => state.events.events
+export const selectTotalResults = state => state.events.totalResults
 
 export const selectMostRecent = state => state.events.mostRecent
 export const selectMostClaimed = state => state.events.mostClaimed

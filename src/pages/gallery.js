@@ -5,7 +5,7 @@ import {
   FETCH_INDEX_PAGE_INFO_STATUS,
   fetchIndexData,
   selectIndexFetchStatus,
-  selectRecentEvents
+  selectEvents, selectTotalResults
 } from '../store';
 import {useDispatch, useSelector} from 'react-redux';
 import {EventCard} from "../components/eventCard";
@@ -29,17 +29,12 @@ const SEARCH_STATUS = {
 export default function Gallery() {
   const dispatch = useDispatch()
 
-  // Meanwhile get all the events
-  useEffect(() => {
-    dispatch(fetchIndexData());
-  }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
-
-  const events  = useSelector(selectRecentEvents)
+  const events  = useSelector(selectEvents)
   const indexFetchStatus = useSelector(selectIndexFetchStatus)
+  const totalResultsAmount = useSelector(selectTotalResults)
 
   const [items, setItems] = useState(events)
   const [searchStatus, setSearchStatus] = useState(SEARCH_STATUS.NoSearch);
-  const [searchResultAmount, setSearchResultAmount] = useState(0);
   const [searchValue, setSearchValue] = useState('');
   const [page, setPage] = useState(0);
   const [moreToLoad, setMoreToLoad] = useState(true)
@@ -50,6 +45,9 @@ export default function Gallery() {
   const [orderDirection, setOrderDirection] = useState(initialOrderDirection)
 
   const fetchData = ({reset = false, nameFilter = undefined}) => {
+    if (reset) {
+      setPage(0)
+    }
     if (nameFilter?.length) {
       // On search, force ordering by initial ordering
       dispatch(fetchIndexData({orderBy: {type: initialOrderType.val, order: initialOrderDirection.val}, nameFilter: nameFilter, privateEvents: false, reset: reset}))
@@ -60,7 +58,6 @@ export default function Gallery() {
 
   // Meanwhile reset state and get all the events
   useEffect(() => {
-    setPage(0)
     if (searchStatus !== SEARCH_STATUS.Searching) {
       eraseSearch()
     }
@@ -75,7 +72,6 @@ export default function Gallery() {
   useEffect(() => {
     if (searchStatus === SEARCH_STATUS.Searching) {
       setSearchStatus(events.length ? SEARCH_STATUS.Success : SEARCH_STATUS.Failed)
-      setSearchResultAmount(events.length);
     }
 
     if (page > 0 && events.length === items.length) {
@@ -99,12 +95,12 @@ export default function Gallery() {
     setSearchValue(value);
     if (value?.length <= 2) {
       setSearchStatus(SEARCH_STATUS.NoSearch)
-      setSearchResultAmount(undefined);
+    } else {
+      setSearchStatus(SEARCH_STATUS.Searching)
     }
   }
   const handleNewSearchValue = (value) => {
     if (value && value.length > 2) {
-      setSearchStatus(SEARCH_STATUS.Searching)
       fetchData({reset: true, nameFilter: value})
     } else if (value === '') {
       fetchData({reset: true})
@@ -143,7 +139,7 @@ export default function Gallery() {
                 }
               </div>
               {
-                searchStatus === SEARCH_STATUS.Success || searchStatus === SEARCH_STATUS.Failed ?
+                (searchStatus === SEARCH_STATUS.Success || searchStatus === SEARCH_STATUS.Failed) &&
                 <span
                   style={{
                     position: 'absolute',
@@ -153,8 +149,8 @@ export default function Gallery() {
                     fontSize: '1rem',
                   }}
                 >
-                  {searchResultAmount} result(s)
-                </span> : null
+                  {totalResultsAmount} result(s)
+                </span>
               }
             </div>
             <div className="gallery-filter">
@@ -235,13 +231,15 @@ export default function Gallery() {
                 </div>
               </div>
             </div>
-            {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED && (
-              (search?.length === 0) ? <div className='failed-search'>
+            {(indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING_MORE) && searchStatus === SEARCH_STATUS.Failed &&
+              <div className='failed-search'>
                 <img src={FailedSearch} alt='Failed search'/>
                 <h3>No results for that search :(</h3>
-              </div> :
-              <Cards events={(search?.length) ? search : items} length={search?.length || length} />
-            )}
+              </div>
+            }
+            {(indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING_MORE) && searchStatus !== SEARCH_STATUS.Failed &&
+              <Cards events={items} />
+            }
             {(indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.IDLE || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING) && <Loader/>}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -252,8 +250,8 @@ export default function Gallery() {
               </div>
           )}
           {
-            moreToLoad && !eventError && (indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING_MORE) &&
-            searchStatus !== SEARCH_STATUS.Failed && ?
+            moreToLoad && (indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING_MORE) &&
+            searchStatus !== SEARCH_STATUS.Failed &&
             <button  className='btn' onClick={() => {
               if (items && items.length) {
                 setPage(page + 1);
@@ -284,5 +282,5 @@ export default function Gallery() {
 }
 
 function Cards({ events }) {
-  return events && events.length && events.map((event, idx) => <EventCard key={`${event.id}-${idx}`} event={event} />)
+  return (events && events.length) ? events.map((event, idx) => <EventCard key={`${event.id}-${idx}`} event={event} />) : null
 }

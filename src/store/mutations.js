@@ -258,7 +258,8 @@ async function getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, 
   return {
     _events: limitedEvents,
     apiIndex: _apiIndex,
-    lessThanPageLimit: paginatedResults.total < PAGE_LIMIT
+    lessThanPageLimit: paginatedResults.total < PAGE_LIMIT,
+    _total: paginatedResults.total
   }
 }
 
@@ -276,13 +277,14 @@ export async function getIndexPageData(orderBy, reset, nameFilter, privateEvents
     mainnetSkip = state.events.mainnetSkip
   }
 
-  let events = [], loopLimit = 10
+  let events = [], loopLimit = 10, total = 0
   while (events.length < PAGE_LIMIT && loopLimit > 0) {
     const missingAmount = PAGE_LIMIT - events.length
     if (orderBy.type === OrderType.id.val || orderBy.type === OrderType.date.val || orderBy.type === OrderType.city.val) {
-      const {_events, apiIndex, lessThanPageLimit} = await getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, missingAmount)
+      const {_events, apiIndex, lessThanPageLimit, _total} = await getEventsByApiFirst(apiSkip, orderBy, privateEvents, nameFilter, missingAmount)
       apiSkip += apiIndex
       events = events.concat(_events)
+      total = _total
       if (lessThanPageLimit) {
         loopLimit = 0 // break out
       }
@@ -300,6 +302,7 @@ export async function getIndexPageData(orderBy, reset, nameFilter, privateEvents
     apiSkip: apiSkip,
     mainnetSkip: mainnetSkip,
     xdaiSkip: xdaiSkip,
+    total: total,
     page: page
   }
 }
@@ -382,8 +385,6 @@ export async function getEventPageData(eventId, first, skip) {
       tokens[j].owner.tokensOwned = mainnetOwners[tokens[j].owner.id].tokensOwned
     } else if (xDaiOwners[tokens[j].owner.id] !== undefined ) {
       tokens[j].owner.tokensOwned = xDaiOwners[tokens[j].owner.id].tokensOwned
-    } else {
-      console.log("NOT FOUND", tokens[j].owner.id, tokens[j].owner.tokensOwned)
     }
   }
   return { id: eventId, event, tokens: uniqBy(tokens, 'id').sort((a, b) => {
