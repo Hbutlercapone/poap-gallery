@@ -55,6 +55,7 @@ export default function Gallery() {
 
   // Meanwhile reset state and get all the events
   useEffect(() => {
+    setPage(0)
     if (searchStatus !== SEARCH_STATUS.Searching) {
       eraseSearch()
     }
@@ -71,6 +72,7 @@ export default function Gallery() {
       setSearchStatus(events.length ? SEARCH_STATUS.Success : SEARCH_STATUS.Failed)
       setSearchResultAmount(events.length);
     }
+
     if (page > 0 && events.length === items.length) {
       setMoreToLoad(false)
     } else {
