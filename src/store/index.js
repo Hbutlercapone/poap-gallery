@@ -1,6 +1,20 @@
 import { createSlice, combineReducers, configureStore, createAsyncThunk, current  } from '@reduxjs/toolkit';
 import {getIndexPageData, getEventPageData, getActivityPageData} from './mutations';
 
+export const FETCH_INFO_STATUS = {
+  IDLE: 'IDLE',
+  LOADING: 'LOADING',
+  LOADING_MORE: 'LOADING_MORE',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED'
+}
+export const FETCH_EVENT_PAGE_INFO_STATUS = {
+  ...FETCH_INFO_STATUS
+}
+export const FETCH_INDEX_PAGE_INFO_STATUS = {
+  ...FETCH_INFO_STATUS
+}
+
 const initialEventsState = {
   events: [],
   event: {},
@@ -8,9 +22,8 @@ const initialEventsState = {
   mostClaimed: undefined,
   upcoming: undefined,
   mostRecent: undefined,
-  status: 'idle',
-  error: null,
-  eventStatus: 'idle',
+  status: FETCH_INDEX_PAGE_INFO_STATUS.IDLE,
+  eventStatus: FETCH_EVENT_PAGE_INFO_STATUS.IDLE,
   eventError: null,
   tokens: [],
   tokenId: null,
@@ -34,9 +47,9 @@ const eventsSlice = createSlice({
     [fetchIndexData.pending]: (state, action) => {
       const reset = action.meta.arg.reset
       if (reset) {
-        state.status = 'loading'
+        state.status = FETCH_INDEX_PAGE_INFO_STATUS.LOADING
       } else {
-        state.status = 'loadingMore'
+        state.status = FETCH_INDEX_PAGE_INFO_STATUS.LOADING_MORE
       }
     },
     [fetchIndexData.fulfilled]: (state, action) => {
@@ -61,15 +74,15 @@ const eventsSlice = createSlice({
       state.apiSkip = apiSkip
       state.mainnetSkip = mainnetSkip
       state.xdaiSkip = xdaiSkip
-      state.status = 'succeeded'
+      state.status = FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED
     },
     [fetchIndexData.rejected]: (state, action) => {
       state.eventError = action.error.message
-      state.status = 'failed'
+      state.status = FETCH_INDEX_PAGE_INFO_STATUS.FAILED
       console.warn(action.error)
     },
     [fetchEventPageData.pending]: (state, action) => {
-      state.eventStatus = 'loading'
+      state.eventStatus = FETCH_EVENT_PAGE_INFO_STATUS.LOADING
     },
     [fetchEventPageData.fulfilled]: (state, action) => {
       if (state.tokenId === action.payload.id) {
@@ -80,11 +93,11 @@ const eventsSlice = createSlice({
 
       state.tokenId = action.payload.id
       state.event = action.payload.event
-      state.eventStatus = 'succeeded'
+      state.eventStatus = FETCH_EVENT_PAGE_INFO_STATUS.SUCCEEDED
     },
     [fetchEventPageData.rejected]: (state, action) => {
       state.eventError = action.error.message
-      state.eventStatus = 'failed'
+      state.eventStatus = FETCH_EVENT_PAGE_INFO_STATUS.FAILED
       console.warn(action.error)
     },
     [fetchActivityPageData.pending]: (state, action) => {
@@ -97,6 +110,7 @@ const eventsSlice = createSlice({
       state.mostClaimed = mostClaimed
     },
     [fetchActivityPageData.rejected]: (state, action) => {
+      // TODO: add activityStatus if necessary
       // state.eventError = action.error.message
       // state.eventStatus = 'failed'
       console.warn(action.error)
@@ -104,8 +118,7 @@ const eventsSlice = createSlice({
   }
 })
 
-export const selectEventStatus = state => state.events.status
-export const selectEventError = state => state.events.error
+export const selectIndexFetchStatus = state => state.events.status
 
 export const selectRecentEvents = state => state.events.events.filter(event => {
   // don't show future events

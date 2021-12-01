@@ -2,9 +2,10 @@ import React, {useCallback, useEffect, useState} from 'react';
 import ActivityTable from '../components/activityTable'
 import {Helmet} from 'react-helmet';
 import {
+  FETCH_INDEX_PAGE_INFO_STATUS,
   fetchIndexData,
-  selectEventError,
-  selectEventStatus,
+  selectIndexFetchStatus,
+  selectRecentEvents
 } from '../store';
 import {useDispatch, useSelector} from 'react-redux';
 import {EventCard} from "../components/eventCard";
@@ -28,9 +29,13 @@ const SEARCH_STATUS = {
 export default function Gallery() {
   const dispatch = useDispatch()
 
-  const events  = useSelector(state => state.events.events)
-  const eventStatus = useSelector(selectEventStatus)
-  const eventError = useSelector(selectEventError)
+  // Meanwhile get all the events
+  useEffect(() => {
+    dispatch(fetchIndexData());
+  }, []); /* eslint-disable-line react-hooks/exhaustive-deps */
+
+  const events  = useSelector(selectRecentEvents)
+  const indexFetchStatus = useSelector(selectIndexFetchStatus)
 
   const [items, setItems] = useState(events)
   const [searchStatus, setSearchStatus] = useState(SEARCH_STATUS.NoSearch);
@@ -230,30 +235,25 @@ export default function Gallery() {
                 </div>
               </div>
             </div>
-            {eventError ? (
-              <div
-                style={{
-                  gridColumn: '1 / 3',
-                }}
-              >
-                <span>Could not load gallery, check your connection and try again</span>
-              </div>
-            ) : eventStatus === 'succeeded' || eventStatus === 'loadingMore' ? (
-              searchStatus === SEARCH_STATUS.Failed ?
-                <div className='failed-search'>
-                  <img src={FailedSearch} alt='Failed search'/>
-                  <h3>No results for that search :(</h3>
-                </div> :
-                <Cards events={items} />
-            ) : (
-              <Loader/>
+            {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED && (
+              (search?.length === 0) ? <div className='failed-search'>
+                <img src={FailedSearch} alt='Failed search'/>
+                <h3>No results for that search :(</h3>
+              </div> :
+              <Cards events={(search?.length) ? search : items} length={search?.length || length} />
             )}
+            {(indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.IDLE || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING) && <Loader/>}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
         </div>
+          {indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.FAILED && (
+              <div className={'center'}>
+                <span>Could not load gallery, check your connection and try again</span>
+              </div>
+          )}
           {
-            moreToLoad && !eventError && (eventStatus === 'succeeded' || eventStatus === 'loadingMore') &&
-            searchStatus !== SEARCH_STATUS.Failed &&
+            moreToLoad && !eventError && (indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.SUCCEEDED || indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING_MORE) &&
+            searchStatus !== SEARCH_STATUS.Failed && ?
             <button  className='btn' onClick={() => {
               if (items && items.length) {
                 setPage(page + 1);
@@ -272,7 +272,7 @@ export default function Gallery() {
                 justifyContent: 'center',
                 boxShadow: '0 6px 18px 0 #6534FF4D',
               }}
-              disabled={eventStatus === 'loadingMore'}
+              disabled={indexFetchStatus === FETCH_INDEX_PAGE_INFO_STATUS.LOADING_MORE}
             >
                 Load more
             </button>

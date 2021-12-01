@@ -58,3 +58,10 @@ export const sortInt = (e1, e2) => (Number.parseInt(e2.id) - Number.parseInt(e1.
 export const onlyUnique = (value, index, self) => {
   return self.indexOf(value) === index;
 }
+
+export const toastInfoOptions = {
+  icon: '',
+  style: {
+    backgroundColor: '#fff8e0'
+  }
+}

@@ -67,7 +67,7 @@ function Content({type, width, size, event, power}) {
     }, [event, transferCount])
 
     const nl2br = (text) => (text.split('\n').map(item => {
-        return <React.Fragment key={item.toString()}>{item}<br/></React.Fragment>
+      return <p className={'discreet-paragraph'} key={item.toString()}>{item}</p>
     }));
 
     return (
@@ -118,7 +118,7 @@ function Content({type, width, size, event, power}) {
                 {/* time and place */}
                 <div className="content-time-place">
                     <Pill style={{ minWidth: (size === 's' ? 'none' : '100px')}} text={event.start_date} icon={size === 's' ? null : faCalendar} />
-                    <Pill className="ellipsis" tooltip={true}
+                    <Pill className="ellipsis"
                       icon={size === 's' ? null : (event.city ? faGlobe : faLaptop)}
                       text={event.city ? event.city : 'Virtual event '}/>
                 </div>
